@@ -1,18 +1,16 @@
+#%%
 from functools import partial
 
 import jax.numpy as jnp
-import jax.scipy as jsp
 import jax.random as jrnd
+import jax.scipy as jsp
+import matplotlib.pyplot as plt
 from jax import jit, vmap
-
-from varz import Vars
 from stheno import Normal
+from varz import Vars
 
-from utils import map2matrix, l2p
-
-# import settings
-
-JITTER = 1e-5
+from .settings import JITTER
+from .utils import l2p, map2matrix, eq_kernel
 
 
 class EQApproxGP:
@@ -41,9 +39,20 @@ class EQApproxGP:
 
         if self.z == None:
             pass
-        elif self.z.shape[1] != self.D:
-            raise ValueError("Dimension of inducing points incorrect")
+
         else:
+            try:
+                assert self.z.shape[1] == self.D
+
+            except IndexError:
+                self.z = self.z.reshape(-1, 1)
+                assert self.D == 1
+
+            except AssertionError:
+                raise ValueError(
+                    "Dimension of inducing points does not match dimension of GP."
+                )
+
             self.Kvv, self.LKvv = self.compute_covariances(amp, ls)
 
     @partial(jit, static_argnums=(0,))
@@ -60,10 +69,11 @@ class EQApproxGP:
 
     @partial(jit, static_argnums=(0,))
     def kernel(self, t, tp, amp, ls):
-        return self.amp ** 2 * jnp.exp(-0.5 * jnp.sum((t - tp) ** 2) / self.ls ** 2)
+        return eq_kernel(t, tp, amp, ls)
 
     @partial(jit, static_argnums=(0, 2))
     def sample_thetas(self, key, shape, ls):
+        # FT of isotropic gaussain is inverser varience
         return jrnd.normal(key, shape) / ls
 
     @partial(jit, static_argnums=(0, 2))
@@ -76,27 +86,42 @@ class EQApproxGP:
 
     @partial(jit, static_argnums=(0,))
     def phi(self, t, theta, beta):
-        return jnp.sqrt(2 / self.N_basis) * jnp.cos(theta * t + beta)
+        return jnp.sqrt(2 / self.N_basis) * jnp.cos(jnp.dot(theta, t) + beta)
 
-    @partial(jit, static_argnums=(0,))
+    # @partial(jit, static_argnums=(0,))
     def compute_q(self, thetas, betas, ws):
         Phi = self.compute_Phi(thetas, betas)
         b = self.v - Phi @ ws
+        print(b.shape)
         return jsp.linalg.cho_solve((self.LKvv, True), b)
 
     def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
-        # posterior part
+
+        try:
+            assert t.shape[1] == self.D
+
+        except IndexError:
+            t = t.reshape(-1, 1)
+            assert self.D == 1
+
+        except AssertionError:
+            raise ValueError(
+                "Dimension of inducing points does not match dimension of GP."
+            )
+        # sample random parameters
         skey = jrnd.split(key, 3)
-        thetas = self.sample_thetas(skey[0], (Ns, self.N_basis), self.ls)
+        thetas = self.sample_thetas(skey[0], (Ns, self.N_basis, self.D), self.ls)
         betas = self.sample_betas(skey[1], (Ns, self.N_basis))
         ws = self.sample_ws(skey[2], (Ns, self.N_basis))
 
+        # fourier basis part
         samps = vmap(
             lambda ti: vmap(lambda thi, bi, wi: jnp.dot(wi, self.phi(ti, thi, bi)))(
                 thetas, betas, ws
             )
         )(t)
 
+        # canonical basis part
         if self.z == None:
             pass
         else:
@@ -104,6 +129,7 @@ class EQApproxGP:
                 thetas, betas, ws
             )  # Ns x Nz
             kv = map2matrix(self.kernel, t, self.z, self.amp, self.ls)  # Nt x Nz
+            # print(qs.shape, kv.shape)
             kv = jnp.einsum("ij, kj", qs, kv)  # Nt x Ns
 
             samps += kv.T
@@ -111,23 +137,38 @@ class EQApproxGP:
         return samps
 
 
-tt = ones((10, 2))
+# %%
+# key = jrnd.PRNGKey(10)
+# X = jnp.arange(-1, 1, 0.1)
+# Y = jnp.arange(-1, 1, 0.1)
+# xx, yy = jnp.meshgrid(X, Y)
+# tt = jnp.array([xx.flatten(), yy.flatten()]).T
+
+# # %%
+# zt = 2.0 * jrnd.uniform(key, (10, 2)) - 1.0
+# vt = 2 * jnp.cos(jnp.dot(jnp.ones((2,)), zt.T)) + jnp.dot(jnp.ones((2,)), zt.T)
+
+# test = EQApproxGP(D=2, v=vt, z=zt, ls=0.3)
+# samps = test.sample(tt, Ns=2)
+
+# fig, ax = plt.subplots(figsize=(20, 20), subplot_kw={"projection": "3d"})
+# # for i in range(len(samps[0])):
+# surf = ax.plot_surface(xx, yy, samps[:, 0].reshape(len(X), len(Y)), alpha=0.8)
+# surf = ax.plot_surface(xx, yy, samps[:, 1].reshape(len(X), len(Y)), alpha=0.8)
+# ax.scatter(zt[:, 0], zt[:, 1], vt, c="red", marker="x")
+# plt.show()
 
 
-test = EQApproxGP()
-t = jnp.linspace(-10, 10, 500)
-samps = test.sample(t)
+# # %%
+# t = jnp.linspace(-10, 10, 500)
 
-import matplotlib.pyplot as plt
+# fig = plt.figure(figsize=(20, 10))
+# z = jnp.linspace(-3, 3, 10)
+# v = 2 * jnp.cos(z) + z
+# testd = EQApproxGP(z=z, v=v, ls=0.5, noise=0.0, N_basis=1000)
+# sampsd = testd.sample(t, Ns=1)
+# plt.plot(t, sampsd)
+# plt.show()
+# %%
 
-plt.plot(t, samps)
-plt.show()
-
-fig = plt.figure(figsize=(20, 10))
-z = jnp.linspace(-3, 3, 10)
-v = 2 * jnp.cos(z) + z
-testd = EQApproxGP(z=z, v=v, ls=0.5, noise=0.0, N_basis=1000)
-sampsd = testd.sample(t, Ns=1)
-plt.plot(t, sampsd)
-plt.show()
-
+# %%
