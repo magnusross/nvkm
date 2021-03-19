@@ -14,9 +14,9 @@ def map2matrix(
 ) -> jnp.DeviceArray:
     """
     Uses Jax's vectorised map, to apply f to app pairs of elements
-    in t, and tp. Most often uses to build covainces matices, 
-    where f is a kernel, and ts == tps, are the inputs. The first 
-    2 arguments of f are mapped, extra non mapped argumnents for 
+    in t, and tp. Most often uses to build covainces matices,
+    where f is a kernel, and ts == tps, are the inputs. The first
+    2 arguments of f are mapped, extra non mapped argumnents for
     f go in args.
 
     Args:
@@ -47,6 +47,11 @@ def p2l(p: float):
 
 
 @jit
+def RMSE(yp, ye):
+    return jnp.sqrt((jnp.sum((yp - ye) ** 2)) / len(yp))
+
+
+@jit
 def eq_kernel(
     t: Union[jnp.DeviceArray, float],
     tp: Union[jnp.DeviceArray, float],
@@ -67,6 +72,19 @@ def eq_kernel(
         float: Covariance between points t and tp.
     """
     return amp ** 2 * jnp.exp(-0.5 * jnp.sum((t - tp) ** 2) / ls ** 2)
+
+
+def method(cls):
+    """Decorator to add the function as a method to a class.
+    Args:
+        cls (type): Class to add the function as a method to.
+    """
+
+    def decorator(f):
+        setattr(cls, f.__name__, f)
+        return f
+
+    return decorator
 
 
 def exact_gp_posterior(kf, ts, zs, us, *kf_args, noise=0.0, jitter=JITTER):

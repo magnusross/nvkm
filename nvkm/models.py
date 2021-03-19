@@ -1,13 +1,11 @@
-#%%
 from functools import partial
+from typing import List, Union
 
 import jax.numpy as jnp
 import jax.random as jrnd
 import jax.scipy as jsp
 import matplotlib.pyplot as plt
 from jax import jit, vmap
-from stheno import Normal
-from varz import Vars
 
 from .settings import JITTER
 from .utils import l2p, map2matrix, eq_kernel
@@ -16,8 +14,8 @@ from .utils import l2p, map2matrix, eq_kernel
 class EQApproxGP:
     def __init__(
         self,
-        z: jnp.DeviceArray = None,
-        v: jnp.DeviceArray = None,
+        z: Union[jnp.DeviceArray, None] = None,
+        v: Union[jnp.DeviceArray, None] = None,
         N_basis: int = 500,
         D: int = 1,
         ls: float = 1.0,
@@ -88,11 +86,10 @@ class EQApproxGP:
     def phi(self, t, theta, beta):
         return jnp.sqrt(2 / self.N_basis) * jnp.cos(jnp.dot(theta, t) + beta)
 
-    # @partial(jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0,))
     def compute_q(self, thetas, betas, ws):
         Phi = self.compute_Phi(thetas, betas)
         b = self.v - Phi @ ws
-        print(b.shape)
         return jsp.linalg.cho_solve((self.LKvv, True), b)
 
     def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
@@ -129,7 +126,6 @@ class EQApproxGP:
                 thetas, betas, ws
             )  # Ns x Nz
             kv = map2matrix(self.kernel, t, self.z, self.amp, self.ls)  # Nt x Nz
-            # print(qs.shape, kv.shape)
             kv = jnp.einsum("ij, kj", qs, kv)  # Nt x Ns
 
             samps += kv.T
@@ -137,38 +133,60 @@ class EQApproxGP:
         return samps
 
 
-# %%
-# key = jrnd.PRNGKey(10)
-# X = jnp.arange(-1, 1, 0.1)
-# Y = jnp.arange(-1, 1, 0.1)
-# xx, yy = jnp.meshgrid(X, Y)
-# tt = jnp.array([xx.flatten(), yy.flatten()]).T
+class NVKM:
+    def __init__(
+        self,
+        zgs: List[Union[jnp.DeviceArray, None]] = [None],
+        vgs: List[Union[jnp.DeviceArray, None]] = [None],
+        zu: Union[jnp.DeviceArray, None] = None,
+        vu: Union[jnp.DeviceArray, None] = None,
+        N_basis: int = 500,
+        C: int = 1,
+        noise: float = 0.5,
+        alpha: float = 1.0,
+        lsgs: List[float] = [1.0],
+        ampgs: List[float] = [1.0],
+        lsu: float = 1.0,
+        ampu: float = 1.0,
+    ):
+        self.zgs = zgs
+        self.vgs = vgs
+        self.zu = zu
+        self.vu = vu
 
-# # %%
-# zt = 2.0 * jrnd.uniform(key, (10, 2)) - 1.0
-# vt = 2 * jnp.cos(jnp.dot(jnp.ones((2,)), zt.T)) + jnp.dot(jnp.ones((2,)), zt.T)
+        self.N_basis = N_basis
+        self.C = C
+        self.noise = noise
+        self.alpha = alpha
 
-# test = EQApproxGP(D=2, v=vt, z=zt, ls=0.3)
-# samps = test.sample(tt, Ns=2)
+        self.lsgs = lsgs
+        self.lsu = lsu
+        self.ampgs = ampgs
+        self.ampu = ampu
 
-# fig, ax = plt.subplots(figsize=(20, 20), subplot_kw={"projection": "3d"})
-# # for i in range(len(samps[0])):
-# surf = ax.plot_surface(xx, yy, samps[:, 0].reshape(len(X), len(Y)), alpha=0.8)
-# surf = ax.plot_surface(xx, yy, samps[:, 1].reshape(len(X), len(Y)), alpha=0.8)
-# ax.scatter(zt[:, 0], zt[:, 1], vt, c="red", marker="x")
-# plt.show()
+        self.g_gps = self.set_G_gps(ampgs, lsgs)
+        self.u_gp = self.set_u_gp(ampu, lsu)
 
+    def set_G_gps(self, ampgs, lsgs):
+        gps = [
+            EQApproxGP(
+                z=self.zgs[i],
+                v=self.vgs[i],
+                N_basis=self.N_basis,
+                D=i + 1,
+                ls=lsgs[i],
+                amp=ampgs[i],
+            )
+            for i in range(self.C)
+        ]
+        return gps
 
-# # %%
-# t = jnp.linspace(-10, 10, 500)
+    def set_u_gp(self, ampu, lsu):
+        return EQApproxGP(
+            z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
+        )
 
-# fig = plt.figure(figsize=(20, 10))
-# z = jnp.linspace(-3, 3, 10)
-# v = 2 * jnp.cos(z) + z
-# testd = EQApproxGP(z=z, v=v, ls=0.5, noise=0.0, N_basis=1000)
-# sampsd = testd.sample(t, Ns=1)
-# plt.plot(t, sampsd)
-# plt.show()
-# %%
+    def sample(self, t, N_s=100, key=jrnd.PRNGKey(1)):
+        # consatant facors multiplied inside  map
+        raise NotImplementedError
 
-# %%
