@@ -1,9 +1,11 @@
 from functools import partial
-from typing import Callable, Union
+from typing import Callable, Union, Collection
+import operator
 
 import jax.numpy as jnp
 import jax.scipy as jsp
 from jax import jit, vmap
+import jax
 
 from .settings import JITTER
 
@@ -28,6 +30,38 @@ def map2matrix(
         jnp.DeviceArray: Ouput matrix.
     """
     return vmap(lambda ti: vmap(lambda tpi: f(ti, tpi, *args))(tps))(ts)
+
+
+@partial(jit, static_argnums=(0,))
+def map_reduce(
+    f: Callable,
+    *arrs: jnp.DeviceArray,
+    init_val: float = 0.0,
+    op: Callable = operator.add
+):
+    sarr = jnp.vstack(arrs).T
+
+    def body_func(i, val):
+        return op(val, f(*sarr[i]))
+
+    return jax.lax.fori_loop(0, sarr.shape[0], body_func, init_val)
+
+
+def map_reduce_1vec(
+    f: Callable,
+    arr2D: jnp.DeviceArray,
+    *arrs: jnp.DeviceArray,
+    init_val: float = 0.0,
+    op: Callable = operator.add
+):
+
+    sarr = jnp.vstack(arrs).T
+    # print(arr2D.shape)
+
+    def body_func(i, val):
+        return op(val, f(arr2D[i], *sarr[i]))
+
+    return jax.lax.fori_loop(0, sarr.shape[0], body_func, init_val)
 
 
 @jit

@@ -1,6 +1,8 @@
-from jax import jit
-from jax import lax
+from jax import jit, vmap
 import jax.numpy as jnp
+from jax import lax
+
+from .utils import map_reduce, map_reduce_1vec
 
 
 @jit
@@ -38,18 +40,7 @@ def integ_2b(t, alpha, p1, z1, p2, z2):
 
 
 def slow_I1(
-    t,
-    zus,
-    thetag,
-    betag,
-    thetus,
-    betaus,
-    wus,
-    qus,
-    sigg=1.0,
-    sigu=1.0,
-    alpha=1.0,
-    pu=1.0,
+    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
 ):
     c = thetag.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
@@ -75,11 +66,40 @@ def slow_I1(
         o1 *= jnp.sqrt(2.0 / Nl) * opa + sigu ** 2 * opb
         o2 *= jnp.sqrt(2.0 / Nl) * ona + sigu ** 2 * onb
 
-        return 0.5 * jnp.sqrt(2.0 / Nl) * (o1 + o2)
+    return 0.5 * jnp.sqrt(2.0 / Nl) * jnp.real((o1 + o2))
+
+
+@jit
+def fast_I1(
+    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
+):
+    Nl = wus.shape[0]  # number of basis functions
+
+    fo = lambda thetag, betag: vmap(
+        lambda thetgij: jnp.sqrt(2.0 / Nl)
+        * map_reduce(
+            lambda wui, thetui, betaui: wui
+            * integ_1a(t, alpha, thetgij, betag, thetui, betaui),
+            wus,
+            thetus,
+            betaus,
+        )
+        + sigu ** 2
+        * map_reduce(
+            lambda qui, zui: qui * integ_1b(t, alpha, thetgij, betag, pu, zui),
+            qus,
+            zus,
+        )
+    )(thetag)
+
+    o1 = jnp.prod(fo(thetag, betag))
+    o2 = jnp.prod(fo(-thetag, -betag))
+
+    return 0.5 * jnp.sqrt(2.0 / Nl) * jnp.real(o1 + o2)
 
 
 def slow_I2(
-    t, zg, zus, thetus, betaus, wus, qus, sigg=1.0, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
+    t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
 ):
     c = zg.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
@@ -98,32 +118,37 @@ def slow_I2(
             os2 += qus[n] * integ_2b(t, alpha, pg, zg[i], pu, zus[n])
 
         o1 *= jnp.sqrt(2 / Nl) * os1
-        o2 *= sigu * os2
-    return sigg * (o1 + o2)
+        o2 *= sigu ** 2 * os2
+    return sigg ** 2 * (o1 + o2)
 
 
+@jit
 def fast_I2(
-    t, zg, zus, thetus, betaus, wus, qus, sigg=1.0, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
+    t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
 ):
-    c = zg.shape[0]  # order of the term
-    Nl = wus.shape[0]  # number of basis functions
-    Mu = zus.shape[0]  # number of u inducing points
+    Nl = wus.shape[0]
+    o1 = jnp.prod(
+        vmap(
+            lambda zgij: jnp.sqrt(2 / Nl)
+            * map_reduce(
+                lambda wi, thetui, betaui: wi
+                * integ_2a(t, alpha, pg, zgij, thetui, betaui),
+                wus,
+                thetus,
+                betaus,
+            )
+        )(zg)
+    )
 
-    o1 = 1.0
-    o2 = 1.0
-
-    for i in range(c):
-        os1 = 0.0
-        os2 = 0.0
-
-        for m in range(Nl):
-            os1 += wus[m] * integ_2a(t, alpha, pg, zg[i], thetus[m], betaus[m])
-        for n in range(Mu):
-            os2 += qus[n] * integ_2b(t, alpha, pg, zg[i], pu, zus[n])
-
-        o1 *= jnp.sqrt(2 / Nl) * os1
-        o2 *= sigu * os2
-    return sigg * (o1 + o2)
+    o2 = jnp.prod(
+        vmap(
+            lambda zgij: sigu ** 2
+            * map_reduce(
+                lambda qi, zui: qi * integ_2b(t, alpha, pg, zgij, pu, zui), qus, zus,
+            )
+        )(zg)
+    )
+    return sigg ** 2 * (o1 + o2)
 
 
 def slow_I(
@@ -138,7 +163,7 @@ def slow_I(
     qgs,
     wus,
     qus,
-    sigg=1.0,
+    sigg,
     sigu=1.0,
     alpha=1.0,
     pg=1.0,
@@ -158,7 +183,7 @@ def slow_I(
             betaus,
             wus,
             qus,
-            sigg=sigg,
+            sigg,
             sigu=sigu,
             alpha=alpha,
             pu=pu,
@@ -172,10 +197,76 @@ def slow_I(
             betaus,
             wus,
             qus,
-            sigg=sigg,
+            sigg,
             sigu=sigu,
             alpha=alpha,
             pu=pu,
+            pg=pg,
         )
 
     return out
+
+
+@jit
+def fast_I(
+    t,
+    zgs,
+    zus,
+    thetags,
+    betags,
+    thetus,
+    betaus,
+    wgs,
+    qgs,
+    wus,
+    qus,
+    sigg,
+    sigu=1.0,
+    alpha=1.0,
+    pg=1.0,
+    pu=1.0,
+):
+
+    o1 = map_reduce_1vec(
+        lambda thetagi, betagi, wgi,: wgi
+        * fast_I1(
+            t,
+            zus,
+            thetagi,
+            betagi,
+            thetus,
+            betaus,
+            wus,
+            qus,
+            sigg,
+            sigu=sigu,
+            alpha=alpha,
+            pu=pu,
+        ),
+        thetags,
+        betags,
+        wgs,
+    )
+
+    o2 = map_reduce_1vec(
+        lambda zgi, qgi: qgi
+        * fast_I2(
+            t,
+            zgi,
+            zus,
+            thetus,
+            betaus,
+            wus,
+            qus,
+            sigg,
+            sigu=sigu,
+            alpha=alpha,
+            pg=pg,
+            pu=pu,
+        ),
+        zgs,
+        qgs,
+    )
+
+    return o1 + o2
+
