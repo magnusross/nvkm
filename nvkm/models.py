@@ -9,6 +9,7 @@ from jax import jit, vmap
 
 from .settings import JITTER
 from .utils import l2p, map2matrix, eq_kernel
+from .integrals import fast_I
 
 
 class EQApproxGP:
@@ -102,9 +103,7 @@ class EQApproxGP:
             assert self.D == 1
 
         except AssertionError:
-            raise ValueError(
-                "Dimension of inducing points does not match dimension of GP."
-            )
+            raise ValueError("Dimension of input does not match dimension of GP.")
         # sample random parameters
         skey = jrnd.split(key, 3)
         thetas = self.sample_thetas(skey[0], (Ns, self.N_basis, self.D), self.ls)
@@ -187,6 +186,70 @@ class NVKM:
         )
 
     def sample(self, t, N_s=100, key=jrnd.PRNGKey(1)):
-        # consatant facors multiplied inside  map
-        raise NotImplementedError
 
+        samples = jnp.zeros((len(t), N_s))
+
+        skey = jrnd.split(key, 4)
+
+        u_gp = self.u_gp
+        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
+        betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
+        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis))
+
+        qul = vmap(lambda thi, bi, wi: u_gp.compute_q(thi, bi, wi))(
+            thetaul.reshape(N_s, -1, 1), betaul, wul
+        )
+
+        for i in range(0, self.C):
+            skey = jrnd.split(skey[3], 4)
+
+            G_gp_i = self.g_gps[i]
+            thetagl = G_gp_i.sample_thetas(
+                skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
+            )
+            betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
+            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
+
+            qgl = vmap(lambda thi, bi, wi: G_gp_i.compute_q(thi, bi, wi))(
+                thetagl.reshape(N_s, -1, 1), betagl, wgl
+            )
+            print(G_gp_i.v.shape)
+            print(u_gp.v.shape)
+
+            print(
+                thetagl.shape,
+                betagl.shape,
+                thetaul.shape,
+                betaul.shape,
+                wgl.shape,
+                qgl.shape,
+                wul.shape,
+                qul.shape,
+            )
+
+            samples += vmap(
+                lambda ti: vmap(
+                    lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
+                        ti,
+                        G_gp_i.z,
+                        u_gp.z,
+                        thetags,
+                        betags,
+                        thetaus,
+                        betaus,
+                        wgs,
+                        qgs,
+                        wus,
+                        qus,
+                        G_gp_i.amp,
+                        sigu=u_gp.amp,
+                        alpha=self.alpha,
+                        pg=l2p(G_gp_i.ls),
+                        pu=l2p(u_gp.ls),
+                    )
+                )(
+                    thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,
+                )
+            )(t)
+
+        return samples

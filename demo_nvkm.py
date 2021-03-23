@@ -1,13 +1,19 @@
 from nvkm.models import NVKM
 import jax.numpy as jnp
+import jax.random as jrnd
 
-t = jnp.linspace(-1.0, 1, 10)
-a = NVKM()
+keys = jrnd.split(jrnd.PRNGKey(5), 10)
+
+t1 = jnp.linspace(-2.0, 2, 10).reshape(-1, 1)
+t2 = 2 * jrnd.uniform(keys[0], shape=(5, 2)) - 1.0
 b = NVKM(
-    zgs=[jnp.ones(5), jnp.ones((5, 2)), None],
-    vgs=[jnp.ones(5), jnp.ones(5), None],
-    lsgs=[1.0, 2.0, 3.0],
-    ampgs=[1.0, 2.0, 3.0],
-    C=3,
+    zu=jnp.linspace(-10, 10, 20).reshape(-1, 1),
+    vu=jrnd.normal(keys[1], shape=(20,)),
+    zgs=[t1, t2],
+    vgs=[jnp.sin(t1).flatten(), jnp.sin(t2[:, 0] ** 2)],
+    lsgs=[1.0, 2.0],
+    ampgs=[1.0, 2.0],
+    C=2,
 )
 
+b.sample(jnp.linspace(-10, 10, 100))
