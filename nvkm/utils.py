@@ -39,7 +39,9 @@ def map_reduce(
     init_val: float = 0.0,
     op: Callable = operator.add
 ):
-    sarr = jnp.vstack(arrs).T
+
+    sarr = jnp.vstack((arr.flatten() for arr in arrs)).T
+    # sarr = jnp.vstack(arrs).T
 
     def body_func(i, val):
         return op(val, f(*sarr[i]))
@@ -47,6 +49,7 @@ def map_reduce(
     return jax.lax.fori_loop(0, sarr.shape[0], body_func, init_val)
 
 
+@partial(jit, static_argnums=(0,))
 def map_reduce_1vec(
     f: Callable,
     arr2D: jnp.DeviceArray,
@@ -55,8 +58,8 @@ def map_reduce_1vec(
     op: Callable = operator.add
 ):
 
-    sarr = jnp.vstack(arrs).T
-    # print(arr2D.shape)
+    sarr = jnp.vstack((arr.flatten() for arr in arrs)).T
+    # sarr = jnp.vstack(arrs).T
 
     def body_func(i, val):
         return op(val, f(arr2D[i], *sarr[i]))

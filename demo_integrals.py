@@ -39,6 +39,7 @@ qus = jrnd.normal(keys[7], shape=(10,))
 %timeit integrals.fast_I2(t, zgs[0], zus, thetus, betaus, wus, qus, 1.0).block_until_ready()
 #%%
 #%%
+
 #%%
 %timeit integrals.slow_I(t, zgs, zus, thetags, betags, thetus, betaus, wgs, qgs, wus, qus, 1.0).block_until_ready()
 #%%

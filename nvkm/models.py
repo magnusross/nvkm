@@ -185,7 +185,7 @@ class NVKM:
             z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
         )
 
-    def sample(self, t, N_s=100, key=jrnd.PRNGKey(1)):
+    def sample(self, t, N_s=10, key=jrnd.PRNGKey(1)):
 
         samples = jnp.zeros((len(t), N_s))
 
@@ -211,20 +211,7 @@ class NVKM:
             wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
 
             qgl = vmap(lambda thi, bi, wi: G_gp_i.compute_q(thi, bi, wi))(
-                thetagl.reshape(N_s, -1, 1), betagl, wgl
-            )
-            print(G_gp_i.v.shape)
-            print(u_gp.v.shape)
-
-            print(
-                thetagl.shape,
-                betagl.shape,
-                thetaul.shape,
-                betaul.shape,
-                wgl.shape,
-                qgl.shape,
-                wul.shape,
-                qul.shape,
+                thetagl, betagl, wgl
             )
 
             samples += vmap(
