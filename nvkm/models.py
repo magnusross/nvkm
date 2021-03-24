@@ -185,9 +185,9 @@ class NVKM:
             z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
         )
 
-    def sample(self, t, N_s=10, key=jrnd.PRNGKey(1)):
+    def samples(self, t, N_s=10, key=jrnd.PRNGKey(1)):
 
-        samples = jnp.zeros((len(t), N_s))
+        samps = jnp.zeros((len(t), N_s))
 
         skey = jrnd.split(key, 4)
 
@@ -214,9 +214,9 @@ class NVKM:
                 thetagl, betagl, wgl
             )
 
-            samples += vmap(
-                lambda ti: vmap(
-                    lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
+            samps += vmap(
+                lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap(
+                    lambda ti: fast_I(
                         ti,
                         G_gp_i.z,
                         u_gp.z,
@@ -234,9 +234,7 @@ class NVKM:
                         pg=l2p(G_gp_i.ls),
                         pu=l2p(u_gp.ls),
                     )
-                )(
-                    thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,
-                )
-            )(t)
+                )(t)
+            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
 
-        return samples
+        return samps
