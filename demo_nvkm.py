@@ -1,5 +1,6 @@
 #%%
-from nvkm.models import NVKM
+from nvkm.models import NVKM, VariationalNVKM
+from nvkm.vi import IndependentGaussians
 import jax.numpy as jnp
 import jax.random as jrnd
 import matplotlib.pyplot as plt
@@ -21,7 +22,8 @@ model = NVKM(
 
 # %%
 t = jnp.linspace(-20, 20, 300)
-test = model.samples(t, N_s=2)
+test = model.sample(t, N_s=2)
+
 #%%
 fig = plt.figure(figsize=(10, 5))
 plt.plot(t, test, label="Sample")
@@ -41,4 +43,26 @@ fig = plt.figure(figsize=(10, 5))
 u_samps = model.u_gp.sample(t, Ns=20)
 plt.plot(t, u_samps)
 plt.scatter(model.u_gp.z, model.u_gp.v)
+# %%
+
+q_pars_init = {
+    "LC_gs": [model.g_gps[i].LKvv * 0.5 for i in range(model.C)],
+    "mu_gs": [jnp.sin(t1).flatten(), jnp.sin(t2[:, 0] ** 2), jnp.sin(t3[:, 0] ** 2)],
+    "LC_u": model.u_gp.LKvv,
+    "mu_u": jrnd.normal(keys[1], shape=(20,)),
+}
+var_model = VariationalNVKM(
+    [t1, t2, t3],
+    jnp.linspace(-10, 10, 20).reshape(-1, 1),
+    None,
+    IndependentGaussians,
+    q_pars_init=q_pars_init,
+    lsgs=[1.0, 2.0, 1.0],
+    ampgs_init=[1.0, 0.0, 0.0],
+    noise_init=0.01,
+    C=3,
+)
+
+# %%
+var_model._var_sample(t, var_model.q_of_v.q_pars, var_model.ampgs)
 # %%
