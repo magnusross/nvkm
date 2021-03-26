@@ -57,6 +57,8 @@ var_model1 = VariationalNVKM(
 )
 # %%
 print("Variational C=1:")
+print("Running once for precompile...")
+var_model1._var_sample(t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s)
 time1 = datetime.now()
 var_model1._var_sample(
     t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s
@@ -85,6 +87,10 @@ var_model3 = VariationalNVKM(
 
 #%%
 print("Variational C=3:")
+print("Running once for precompile...")
+var_model3._var_sample(
+    t, var_model3.q_of_v.q_pars, var_model3.ampgs, N_s
+).block_until_ready()
 time1 = datetime.now()
 var_model3._var_sample(
     t, var_model3.q_of_v.q_pars, var_model3.ampgs, N_s
