@@ -33,7 +33,7 @@ class VariationalDistribution:
 
 
 class IndependentGaussians:
-    def __init__(self, init_pars: Union[VIPars, None] = None):
+    def __init__(self, p_pars: VIPars, init_pars: Union[VIPars, None] = None):
         """[summary]
 
         Args:
@@ -41,6 +41,7 @@ class IndependentGaussians:
             should have fields "LCu", "mu", 
         """
         # super().__init__(init_pars)
+        self.p_pars = p_pars
         self.q_pars = init_pars
         self.D = len(init_pars["mu_gs"])
 
@@ -51,7 +52,7 @@ class IndependentGaussians:
     def single_KL(self, LC, m, LK):
         C = LC @ LC.T
         mt = -0.5 * (
-            jnp.dot(m.T, jsp.linalg.cho_solve(LK, m))
+            jnp.dot(m.T, jsp.linalg.cho_solve((LK, True), m))
             + jnp.trace(jsp.linalg.cho_solve((LK, True), C))
         )
         st = jnp.sum(jnp.log(jnp.diag(LC) / jnp.diag(LK))) + 0.5 * LC.shape[0]
@@ -59,9 +60,11 @@ class IndependentGaussians:
 
     @partial(jit, static_argnums=(0,))
     def _KL(self, p_pars, q_pars):
-        val = jnp.sum(
-            vmap(self.single_KL)(q_pars["LC_gs"], q_pars["mu_gs"], p_pars["LK_gs"])
-        )
+        val = 0.0
+        for i in range(self.D):
+            val += self.single_KL(
+                q_pars["LC_gs"][i], q_pars["mu_gs"][i], p_pars["LK_gs"][i]
+            )
         val += self.single_KL(q_pars["LC_u"], q_pars["mu_u"], p_pars["LK_u"])
         return val
 

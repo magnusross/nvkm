@@ -1,19 +1,20 @@
 from functools import partial
-from typing import List, Union, Tuple, Callable
+from typing import Callable, List, Tuple, Union
 
+import jax.experimental.optimizers as opt
 import jax.numpy as jnp
 import jax.random as jrnd
 import jax.scipy as jsp
 import matplotlib.pyplot as plt
-from jax import jit, vmap
+from jax import jit, vmap, value_and_grad
 
-from .settings import JITTER
-from .utils import l2p, map2matrix, eq_kernel
 from .integrals import fast_I
+from .settings import JITTER
+from .utils import eq_kernel, l2p, map2matrix
 from .vi import (
+    IndependentGaussians,
     VariationalDistribution,
     VIPars,
-    IndependentGaussians,
     gaussain_likelihood,
 )
 
@@ -267,7 +268,7 @@ class VariationalNVKM(NVKM):
         data: Tuple[jnp.DeviceArray, jnp.DeviceArray],
         q_class: VariationalDistribution,
         q_pars_init: Union[VIPars, None] = None,
-        liklihood: Callable = gaussain_likelihood,
+        likelihood: Callable = gaussain_likelihood,
         N_basis: int = 500,
         C: int = 1,
         ampgs_init: List[float] = [1.0],
@@ -295,10 +296,26 @@ class VariationalNVKM(NVKM):
             ampu=ampu,
         )
 
+        self.q_pars = q_pars_init
+        self.p_pars = {"LK_gs": [gp.LKvv for gp in self.g_gps], "LK_u": self.u_gp.LKvv}
+
         if q_pars_init == None:
-            self.q_of_v = q_class().initialize(data)
+            self.q_of_v = q_class(self.p_pars).initialize(data)
         else:
-            self.q_of_v = q_class(init_pars=q_pars_init)
+            self.q_of_v = q_class(self.p_pars, init_pars=q_pars_init)
+
+        self.data = data
+        self.likelihood = likelihood
+
+    @partial(jit, static_argnums=(0,))
+    def _fast_p_par_recompute(self, new_ampgs):
+        return {
+            "LK_gs": [
+                self.g_gps[i].fast_covariance_recompute(new_ampgs[i])[1]
+                for i in range(self.C)
+            ],
+            "LK_u": self.p_pars["LK_u"],
+        }
 
     @partial(jit, static_argnums=(0, 4))
     def _var_sample(self, t, q_pars, ampgs, N_s, key=jrnd.PRNGKey(1)):
@@ -358,3 +375,60 @@ class VariationalNVKM(NVKM):
             )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
 
         return samps
+
+    @partial(jit, static_argnums=(0, 5))
+    def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key=jrnd.PRNGKey(1)):
+        p_pars = self._fast_p_par_recompute(ampgs)
+        KL = self.q_of_v._KL(p_pars, q_pars)
+
+        x, y = data
+        samples = self._var_sample(x, q_pars, ampgs, N_s, key=key)
+        like = self.likelihood(y, samples, noise)
+        return -(KL + like)
+
+    def fit(self, its, lr, batch_size, N_s, key=jrnd.PRNGKey(1)):
+        x, y = self.data
+
+        opt_init, opt_update, get_params = opt.adam(lr)
+
+        dpars = {"q_pars": self.q_pars, "noise": self.noise, "ampgs": self.ampgs}
+        opt_state = opt_init(dpars)
+
+        key, skey = jrnd.split(key)
+        for i in range(its):
+            if batch_size:
+                rnd_idx = jrnd.choice(key, len(y), shape=(batch_size,))
+                y_b = y[rnd_idx]
+                x_b = x[rnd_idx]
+            # print(rnd_idx)
+            else:
+                y_b = y
+                x_b = x
+
+            for j in range(self.C):
+                dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
+            dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
+
+            for k in dpars.keys():
+                val = get_params(opt_state)[k]
+                dpars[k] = val
+                setattr(self, k, val)
+            # print(get_params(opt_state))
+            value, grads = value_and_grad(
+                lambda dp: self._compute_bound(
+                    (x_b, y_b), dp["q_pars"], dp["ampgs"], dp["noise"], N_s, key=skey
+                )
+            )(dpars)
+            # print(value)
+            print(dpars)
+            if jnp.any(jnp.isnan(value)):
+                print("nan F!!")
+                return get_params(opt_state)
+
+            elif i % 1 == 0 and i > 1:
+                print(f"it: {i} F: {value} ")
+
+            opt_state = opt_update(i, grads, opt_state)
+            # this ensurse array are lower triangular
+            # should prob go elsewhere
+
