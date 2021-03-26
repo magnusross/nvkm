@@ -300,13 +300,15 @@ class VariationalNVKM(NVKM):
         else:
             self.q_of_v = q_class(init_pars=q_pars_init)
 
-    def _var_sample(self, t, q_pars, ampgs, N_s=10, key=jrnd.PRNGKey(1)):
+    @partial(jit, static_argnums=(0, 4))
+    def _var_sample(self, t, q_pars, ampgs, N_s, key=jrnd.PRNGKey(1)):
 
         v_samps = self.q_of_v._sample(q_pars, N_s, key)
         # samps = self._sample(t, v_samps["gs"], v_samps["u"], ampgs, N_s)
 
         skey = jrnd.split(key, 4)
         u_gp = self.u_gp
+        # print(type((N_s, u_gp.N_basis, 1)))
         thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
         betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
         wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis))

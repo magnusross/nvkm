@@ -21,32 +21,32 @@ model = NVKM(
     C=3,
 )
 
-#
+# #
 
 
-# %%
-test = model.sample(t, N_s=2)
+# # %%
+# test = model.sample(t, N_s=2)
 
-#%%
-fig = plt.figure(figsize=(10, 5))
-plt.plot(t, test, label="Sample")
-plt.legend()
-plt.show()
+# #%%
+# fig = plt.figure(figsize=(10, 5))
+# plt.plot(t, test, label="Sample")
+# plt.legend()
+# plt.show()
 
-# %%
-tg = jnp.linspace(-3, 3, 100)
-for gp in model.g_gps:
-    samps = gp.sample(jnp.vstack((tg for i in range(gp.D))).T, Ns=20)
-    window = jnp.exp(-model.alpha * (tg) ** 2)
+# # %%
+# tg = jnp.linspace(-3, 3, 100)
+# for gp in model.g_gps:
+#     samps = gp.sample(jnp.vstack((tg for i in range(gp.D))).T, Ns=20)
+#     window = jnp.exp(-model.alpha * (tg) ** 2)
 
-    plt.plot(tg, (samps.T * window).T)
-    plt.show()
-#%%
-fig = plt.figure(figsize=(10, 5))
-u_samps = model.u_gp.sample(t, Ns=20)
-plt.plot(t, u_samps)
-plt.scatter(model.u_gp.z, model.u_gp.v)
-# %%
+#     plt.plot(tg, (samps.T * window).T)
+#     plt.show()
+# #%%
+# fig = plt.figure(figsize=(10, 5))
+# u_samps = model.u_gp.sample(t, Ns=20)
+# plt.plot(t, u_samps)
+# plt.scatter(model.u_gp.z, model.u_gp.v)
+
 
 q_pars_init3 = {
     "LC_gs": [model.g_gps[i].LKvv * 0.5 for i in range(model.C)],
@@ -66,11 +66,12 @@ var_model3 = VariationalNVKM(
     C=3,
 )
 
+var_model3.q_of_v._sample(var_model3.q_of_v.q_pars, 10, keys[0])
 
-var_samps = var_model3._var_sample(t, var_model3.q_of_v.q_pars, var_model3.ampgs, N_s=2)
+var_samps = var_model3._var_sample(t, var_model3.q_of_v.q_pars, var_model3.ampgs, 2)
 # %timeit model.sample(t, N_s=1)
 #%%
-# %timeit var_model3.q_of_v._sample(var_model3.q_of_v.q_pars, 2, jrnd.PRNGKey(1) )
+%timeit 
 # %%
 fig = plt.figure(figsize=(10, 5))
 plt.plot(t, var_samps, label="Sample")
@@ -100,7 +101,7 @@ t = jnp.linspace(-20, 20, 50)
 # %timeit var_model1._var_sample(t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s=2).block_until_ready()
 # %%
 t = jnp.linspace(-20, 20, 300)
-samps1 = var_model1._var_sample(t, var_model.q_of_v.q_pars, var_model.ampgs, N_s=2)
+samps1 = var_model1._var_sample(t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s=2)
 fig = plt.figure(figsize=(10, 5))
 plt.plot(t, samps1, label="Sample")
 plt.legend()

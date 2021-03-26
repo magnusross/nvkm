@@ -32,7 +32,7 @@ class VariationalDistribution:
         return self._sample(self.q_pars, N_s, key)
 
 
-class IndependentGaussians(VariationalDistribution):
+class IndependentGaussians:
     def __init__(self, init_pars: Union[VIPars, None] = None):
         """[summary]
 
@@ -40,7 +40,8 @@ class IndependentGaussians(VariationalDistribution):
             init_pars (Dict[str, jnp.DeviceArray]):
             should have fields "LCu", "mu", 
         """
-        super().__init__(init_pars)
+        # super().__init__(init_pars)
+        self.q_pars = init_pars
         self.D = len(init_pars["mu_gs"])
 
     def initialize(self, data):
@@ -64,7 +65,7 @@ class IndependentGaussians(VariationalDistribution):
         val += self.single_KL(q_pars["LC_u"], q_pars["mu_u"], p_pars["LK_u"])
         return val
 
-    # @partial(jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0, 2))
     def _sample(self, q_pars, N_s, key):
         keys = jrnd.split(key, self.D + 1)
         samps_dict = {"u": None, "gs": []}
