@@ -67,3 +67,6 @@ class TestEQApproxGP:
         mean_err = utils.RMSE(jnp.mean(samps_diag, axis=1), exact_m_diag)
         var_error = utils.RMSE(jnp.var(samps_diag, axis=1), jnp.diag(exact_cov_diag))
         assert mean_err < 0.05 and var_error < 0.05
+
+    def test_fast_covariance_recompute(self):
+        raise NotImplementedError

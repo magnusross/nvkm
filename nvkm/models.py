@@ -1,5 +1,5 @@
 from functools import partial
-from typing import List, Union
+from typing import List, Union, Tuple, Callable
 
 import jax.numpy as jnp
 import jax.random as jrnd
@@ -10,6 +10,12 @@ from jax import jit, vmap
 from .settings import JITTER
 from .utils import l2p, map2matrix, eq_kernel
 from .integrals import fast_I
+from .vi import (
+    VariationalDistribution,
+    VIPars,
+    IndependentGaussians,
+    gaussain_likelihood,
+)
 
 
 class EQApproxGP:
@@ -30,6 +36,7 @@ class EQApproxGP:
         self.D = D
 
         self.ls = ls
+        self.pr = l2p(ls)
         self.amp = amp
         self.noise = noise
 
@@ -63,6 +70,11 @@ class EQApproxGP:
         return Kvv, LKvv
 
     @partial(jit, static_argnums=(0,))
+    def fast_covariance_recompute(self, new_amp):
+        factor = new_amp ** 2 / self.amp ** 2
+        return factor * self.Kvv, factor * self.LKvv
+
+    @partial(jit, static_argnums=(0,))
     def compute_Phi(self, thetas, betas):
         return vmap(lambda zi: self.phi(zi, thetas, betas))(self.z)
 
@@ -88,12 +100,13 @@ class EQApproxGP:
         return jnp.sqrt(2 / self.N_basis) * jnp.cos(jnp.dot(theta, t) + beta)
 
     @partial(jit, static_argnums=(0,))
-    def compute_q(self, thetas, betas, ws):
+    def compute_q(self, v, LKvv, thetas, betas, ws):
         Phi = self.compute_Phi(thetas, betas)
-        b = self.v - Phi @ ws
-        return jsp.linalg.cho_solve((self.LKvv, True), b)
+        b = v - Phi @ ws
+        return jsp.linalg.cho_solve((LKvv, True), b)
 
-    def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
+    @partial(jit, static_argnums=(0,))
+    def _sample(self, t, v, amp, Ns=100, key=jrnd.PRNGKey(1)):
 
         try:
             assert t.shape[1] == self.D
@@ -121,15 +134,18 @@ class EQApproxGP:
         if self.z == None:
             pass
         else:
-            qs = vmap(lambda thi, bi, wi: self.compute_q(thi, bi, wi))(
+            qs = vmap(lambda thi, bi, wi: self.compute_q(v, self.LKvv, thi, bi, wi))(
                 thetas, betas, ws
             )  # Ns x Nz
-            kv = map2matrix(self.kernel, t, self.z, self.amp, self.ls)  # Nt x Nz
+            kv = map2matrix(self.kernel, t, self.z, amp, self.ls)  # Nt x Nz
             kv = jnp.einsum("ij, kj", qs, kv)  # Nt x Ns
 
             samps += kv.T
 
         return samps
+
+    def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
+        return self._sample(t, self.v, self.amp, Ns=Ns, key=key)
 
 
 class NVKM:
@@ -185,10 +201,9 @@ class NVKM:
             z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
         )
 
-    def samples(self, t, N_s=10, key=jrnd.PRNGKey(1)):
+    def _sample(self, t, vgs, vu, ampgs, N_s=10, key=jrnd.PRNGKey(1)):
 
         samps = jnp.zeros((len(t), N_s))
-
         skey = jrnd.split(key, 4)
 
         u_gp = self.u_gp
@@ -196,8 +211,8 @@ class NVKM:
         betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
         wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis))
 
-        qul = vmap(lambda thi, bi, wi: u_gp.compute_q(thi, bi, wi))(
-            thetaul.reshape(N_s, -1, 1), betaul, wul
+        qul = vmap(lambda thi, bi, wi: u_gp.compute_q(vu, u_gp.LKvv, thi, bi, wi))(
+            thetaul, betaul, wul
         )
 
         for i in range(0, self.C):
@@ -210,9 +225,10 @@ class NVKM:
             betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
             wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
 
-            qgl = vmap(lambda thi, bi, wi: G_gp_i.compute_q(thi, bi, wi))(
-                thetagl, betagl, wgl
-            )
+            _, G_LKvv = G_gp_i.fast_covariance_recompute(ampgs[i])
+            qgl = vmap(
+                lambda thi, bi, wi: G_gp_i.compute_q(vgs[i], G_LKvv, thi, bi, wi)
+            )(thetagl, betagl, wgl)
 
             samps += vmap(
                 lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap(
@@ -228,11 +244,113 @@ class NVKM:
                         qgs,
                         wus,
                         qus,
-                        G_gp_i.amp,
+                        ampgs[i],
                         sigu=u_gp.amp,
                         alpha=self.alpha,
-                        pg=l2p(G_gp_i.ls),
-                        pu=l2p(u_gp.ls),
+                        pg=G_gp_i.pr,
+                        pu=u_gp.pr,
+                    )
+                )(t)
+            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
+
+        return samps
+
+    def sample(self, t, N_s=10, key=jrnd.PRNGKey(1)):
+        return self._sample(t, self.vgs, self.vu, self.ampgs, N_s=N_s, key=key)
+
+
+class VariationalNVKM(NVKM):
+    def __init__(
+        self,
+        zgs: List[jnp.DeviceArray],
+        zu: jnp.DeviceArray,
+        data: Tuple[jnp.DeviceArray, jnp.DeviceArray],
+        q_class: VariationalDistribution,
+        q_pars_init: Union[VIPars, None] = None,
+        liklihood: Callable = gaussain_likelihood,
+        N_basis: int = 500,
+        C: int = 1,
+        ampgs_init: List[float] = [1.0],
+        noise_init: float = 0.5,
+        alpha: float = 1.0,
+        lsgs: List[float] = [1.0],
+        lsu: float = 1.0,
+        ampu: float = 1.0,
+    ):
+        vgs = [None] * C
+        vu = None
+
+        super().__init__(
+            zgs=zgs,
+            zu=zu,
+            vgs=vgs,
+            vu=vu,
+            N_basis=N_basis,
+            C=C,
+            ampgs=ampgs_init,
+            noise=noise_init,
+            alpha=alpha,
+            lsgs=lsgs,
+            lsu=lsu,
+            ampu=ampu,
+        )
+
+        if q_pars_init == None:
+            self.q_of_v = q_class().initialize(data)
+        else:
+            self.q_of_v = q_class(init_pars=q_pars_init)
+
+    def _var_sample(self, t, q_pars, ampgs, N_s=10, key=jrnd.PRNGKey(1)):
+
+        v_samps = self.q_of_v._sample(q_pars, N_s, key)
+        # samps = self._sample(t, v_samps["gs"], v_samps["u"], ampgs, N_s)
+
+        skey = jrnd.split(key, 4)
+        u_gp = self.u_gp
+        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
+        betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
+        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis))
+
+        qul = vmap(
+            lambda vui, thi, bi, wi: u_gp.compute_q(vui, u_gp.LKvv, thi, bi, wi)
+        )(v_samps["u"], thetaul, betaul, wul)
+
+        samps = jnp.zeros((len(t), N_s))
+        for i in range(0, self.C):
+            skey = jrnd.split(skey[3], 4)
+
+            G_gp_i = self.g_gps[i]
+            thetagl = G_gp_i.sample_thetas(
+                skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
+            )
+            betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
+            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
+
+            # print(G_gp_i.LKvv, G_Lkvv)
+            _, G_LKvv = G_gp_i.fast_covariance_recompute(ampgs[i])
+            qgl = vmap(
+                lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
+            )(v_samps["gs"][i], thetagl, betagl, wgl)
+            # samps += jnp.zeros((len(t), N_s))
+            samps += vmap(
+                lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap(
+                    lambda ti: fast_I(
+                        ti,
+                        G_gp_i.z,
+                        u_gp.z,
+                        thetags,
+                        betags,
+                        thetaus,
+                        betaus,
+                        wgs,
+                        qgs,
+                        wus,
+                        qus,
+                        ampgs[i],
+                        sigu=u_gp.amp,
+                        alpha=self.alpha,
+                        pg=G_gp_i.pr,
+                        pu=u_gp.pr,
                     )
                 )(t)
             )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
