@@ -70,10 +70,10 @@ class EQApproxGP:
         LKvv = jnp.linalg.cholesky(Kvv)
         return Kvv, LKvv
 
-    @partial(jit, static_argnums=(0,))
-    def fast_covariance_recompute(self, new_amp):
-        factor = new_amp ** 2 / self.amp ** 2
-        return factor * self.Kvv, factor * self.LKvv
+    # @partial(jit, static_argnums=(0,))
+    # def fast_covariance_recompute(self, new_amp):
+    #     factor = new_amp ** 2 / self.amp ** 2
+    #     return factor * self.Kvv, factor * self.LKvv
 
     @partial(jit, static_argnums=(0,))
     def compute_Phi(self, thetas, betas):
@@ -106,8 +106,8 @@ class EQApproxGP:
         b = v - Phi @ ws
         return jsp.linalg.cho_solve((LKvv, True), b)
 
-    @partial(jit, static_argnums=(0,))
-    def _sample(self, t, v, amp, Ns=100, key=jrnd.PRNGKey(1)):
+    @partial(jit, static_argnums=(0, 4))
+    def _sample(self, t, v, amp, Ns, key=jrnd.PRNGKey(1)):
 
         try:
             assert t.shape[1] == self.D
@@ -146,7 +146,7 @@ class EQApproxGP:
         return samps
 
     def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
-        return self._sample(t, self.v, self.amp, Ns=Ns, key=key)
+        return self._sample(t, self.v, self.amp, Ns, key=key)
 
 
 class NVKM:
@@ -226,7 +226,7 @@ class NVKM:
             betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
             wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
 
-            _, G_LKvv = G_gp_i.fast_covariance_recompute(ampgs[i])
+            _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
             qgl = vmap(
                 lambda thi, bi, wi: G_gp_i.compute_q(vgs[i], G_LKvv, thi, bi, wi)
             )(thetagl, betagl, wgl)
@@ -297,8 +297,7 @@ class VariationalNVKM(NVKM):
         )
 
         self.q_pars = q_pars_init
-        self.p_pars = {"LK_gs": [gp.LKvv for gp in self.g_gps], "LK_u": self.u_gp.LKvv}
-
+        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         if q_pars_init == None:
             self.q_of_v = q_class(self.p_pars).initialize(data)
         else:
@@ -308,17 +307,37 @@ class VariationalNVKM(NVKM):
         self.likelihood = likelihood
 
     @partial(jit, static_argnums=(0,))
-    def _fast_p_par_recompute(self, new_ampgs):
+    def _compute_p_pars(self, ampgs, lsgs, ampu, lsu):
         return {
             "LK_gs": [
-                self.g_gps[i].fast_covariance_recompute(new_ampgs[i])[1]
+                self.g_gps[i].compute_covariances(ampgs[i], lsgs[i])[1]
                 for i in range(self.C)
             ],
-            "LK_u": self.p_pars["LK_u"],
+            "LK_u": self.u_gp.compute_covariances(ampu, lsu)[1],
         }
 
+    def sample_diag_g_gps(self, ts, N_s, key=jrnd.PRNGKey(1)):
+        skey = jrnd.split(key, N_s + 1)
+        v_gs = self.q_of_v._sample(self.q_pars, N_s, skey[0])["gs"]
+        return [
+            vmap(lambda vi, keyi: gp._sample(ts[i], vi, gp.amp, 1, keyi).flatten())(
+                v_gs[i], skey[1:]
+            ).T
+            for i, gp in enumerate(self.g_gps)
+        ]
+
+    def sample_u_gp(self, t, N_s, key=jrnd.PRNGKey(1)):
+        skey = jrnd.split(key, N_s + 1)
+        v_u = self.q_of_v._sample(self.q_pars, N_s, skey[0])["u"]
+
+        return vmap(
+            lambda vi, keyi: self.u_gp._sample(
+                t, vi, self.u_gp.amp, 1, key=keyi
+            ).flatten()
+        )(v_u, skey[1:]).T
+
     @partial(jit, static_argnums=(0, 4))
-    def _var_sample(self, t, q_pars, ampgs, N_s, key=jrnd.PRNGKey(1)):
+    def _sample(self, t, q_pars, ampgs, N_s, key=jrnd.PRNGKey(1)):
 
         v_samps = self.q_of_v._sample(q_pars, N_s, key)
         # samps = self._sample(t, v_samps["gs"], v_samps["u"], ampgs, N_s)
@@ -346,7 +365,7 @@ class VariationalNVKM(NVKM):
             wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
 
             # print(G_gp_i.LKvv, G_Lkvv)
-            _, G_LKvv = G_gp_i.fast_covariance_recompute(ampgs[i])
+            _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
             qgl = vmap(
                 lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
             )(v_samps["gs"][i], thetagl, betagl, wgl)
@@ -376,15 +395,24 @@ class VariationalNVKM(NVKM):
 
         return samps
 
+    def sample(self, t, N_s, key=jrnd.PRNGKey(1)):
+        return self._sample(t, self.q_pars, self.ampgs, N_s, key=jrnd.PRNGKey(1))
+
     @partial(jit, static_argnums=(0, 5))
     def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key=jrnd.PRNGKey(1)):
-        p_pars = self._fast_p_par_recompute(ampgs)
+        p_pars = self._compute_p_pars(ampgs, self.lsgs, self.ampu, self.lsu)
+
         KL = self.q_of_v._KL(p_pars, q_pars)
 
         x, y = data
-        samples = self._var_sample(x, q_pars, ampgs, N_s, key=key)
+        samples = self._sample(x, q_pars, ampgs, N_s, key=key)
         like = self.likelihood(y, samples, noise)
         return -(KL + like)
+
+    def compute_bound(self, N_s, key=jrnd.PRNGKey(1)):
+        return self._compute_bound(
+            self.data, self.q_of_v.q_pars, self.ampgs, self.noise, N_s, key=key
+        )
 
     def fit(self, its, lr, batch_size, N_s, key=jrnd.PRNGKey(1)):
         x, y = self.data
@@ -394,8 +422,8 @@ class VariationalNVKM(NVKM):
         dpars = {"q_pars": self.q_pars, "noise": self.noise, "ampgs": self.ampgs}
         opt_state = opt_init(dpars)
 
-        key, skey = jrnd.split(key)
         for i in range(its):
+            key, skey = jrnd.split(key)
             if batch_size:
                 rnd_idx = jrnd.choice(key, len(y), shape=(batch_size,))
                 y_b = y[rnd_idx]
@@ -405,14 +433,15 @@ class VariationalNVKM(NVKM):
                 y_b = y
                 x_b = x
 
+            # this ensurse array are lower triangular
+            # should prob go elsewhere
             for j in range(self.C):
                 dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
             dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
 
             for k in dpars.keys():
-                val = get_params(opt_state)[k]
-                dpars[k] = val
-                setattr(self, k, val)
+                dpars[k] = get_params(opt_state)[k]
+
             # print(get_params(opt_state))
             value, grads = value_and_grad(
                 lambda dp: self._compute_bound(
@@ -420,7 +449,7 @@ class VariationalNVKM(NVKM):
                 )
             )(dpars)
             # print(value)
-            print(dpars)
+
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
                 return get_params(opt_state)
@@ -429,6 +458,54 @@ class VariationalNVKM(NVKM):
                 print(f"it: {i} F: {value} ")
 
             opt_state = opt_update(i, grads, opt_state)
-            # this ensurse array are lower triangular
-            # should prob go elsewhere
+        # when optimisation complete, set attributes to be new ones
+        # and update computations
+        for k in dpars.keys():
+            setattr(self, k, get_params(opt_state)[k])
+
+        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
+        self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
+        self.u_gp = self.set_u_gp(self.ampu, self.lsu)
+
+    def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+        skey = jrnd.split(key, 2)
+
+        fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+        samps = self.sample(t, N_s, key=skey[0])
+        axs[0].plot(t, samps, c="green", alpha=0.5)
+        axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
+        axs[0].legend()
+        u_samps = self.sample_u_gp(t, N_s, key=skey[1])
+        axs[1].plot(t, u_samps, c="blue", alpha=0.5)
+        axs[1].scatter(
+            self.u_gp.z,
+            self.q_pars["mu_u"],
+            label="Inducing Points",
+            marker="x",
+            c="green",
+        )
+        axs[1].legend()
+        if save:
+            plt.savefig("samps.png")
+        plt.show()
+
+    def plot_filters(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+
+        ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps]
+        g_samps = self.sample_diag_g_gps(ts, N_s, key=key)
+
+        fig, axs = plt.subplots(self.C, 1, figsize=(8, 5 * self.C))
+
+        for i in range(self.C):
+            if self.C == 1:
+                ax = axs
+            else:
+                ax = axs[i]
+            y = g_samps[i].T * jnp.exp(-self.alpha * (t) ** 2)
+            ax.plot(t, y.T, c="red", alpha=0.5)
+            ax.set_title(f"$G_{i}$")
+
+        if save:
+            plt.savefig("filters.png")
+        plt.show()
 

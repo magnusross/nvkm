@@ -140,3 +140,44 @@ def exact_gp_posterior(kf, ts, zs, us, *kf_args, noise=0.0, jitter=JITTER):
     K_post = Kpp - jnp.dot(Lop.T, Lop)
 
     return m_post, K_post
+
+
+def generate_C2_volterra_data(
+    key=jax.random.PRNGKey(345), N_tr=500, N_te=0, C=None, noise=0.5
+):
+    def k1(x):
+        return jnp.exp(-0.2 * x ** 2) * jnp.sin(2 * x)
+
+    def k2(x1, x2):
+        return jnp.exp(-(((x1 - 2.0) ** 2 + (x2 - 2.0) ** 2))) - jnp.exp(
+            -(((x1 + 2.0) ** 2 + (x2 + 2.0) ** 2))
+        )
+
+    nw1 = 1000
+    d1 = 30
+    u = jax.random.normal(key, (nw1,))
+    tau = jnp.linspace(-d1, d1, nw1)
+    taux, tauy = jnp.meshgrid(jnp.linspace(-d1, d1, nw1), jnp.linspace(-d1, d1, nw1))
+
+    def int1(t):
+        return jnp.sum(k1(t - tau) * u)
+
+    def int2(t):
+        return jnp.sum(k2(t - taux, t - tauy) * jnp.outer(u, u)) * 0.1
+
+    N = N_te + N_tr
+    x = jnp.linspace(-30, 30, N)
+    if C == 1:
+        y = jnp.array([int1(xi) for xi in x])
+    elif C == 2:
+        y = jnp.array([int2(xi) for xi in x])
+    else:
+        y = jnp.array([int1(xi) + int2(xi) for xi in x])
+    # y = jnp.array([ans(xi) for xi in x])
+    y = (y - jnp.mean(y)) / jnp.std(y) + noise * jax.random.normal(key, (N,))
+
+    rand_idx = jax.random.permutation(key, jnp.arange(N))
+    rand_idx_tr = rand_idx[:N_tr]
+    rand_idx_te = rand_idx[N_tr:]
+
+    return x[rand_idx_tr], y[rand_idx_tr], x[rand_idx_te], y[rand_idx_te]

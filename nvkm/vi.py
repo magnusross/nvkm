@@ -97,4 +97,4 @@ def gaussain_likelihood(y, samples, noise):
     Nt = samples.shape[1]
     Ns = samples.shape[0]
     C = -0.5 * Nt * jnp.log(2 * jnp.pi * noise ** 2)
-    return C - (1 / Ns) * (1 / (2 * noise ** 2)) * jnp.sum((y - samples) ** 2)
+    return C - (1 / Ns) * (1 / (2 * noise ** 2)) * jnp.sum((y - samples.T) ** 2)

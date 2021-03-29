@@ -6,40 +6,55 @@ import jax.random as jrnd
 import matplotlib.pyplot as plt
 
 keys = jrnd.split(jrnd.PRNGKey(5), 10)
-
 t1 = jnp.linspace(-2.0, 2, 2).reshape(-1, 1)
-t2 = 2 * jrnd.uniform(keys[0], shape=(2, 2)) - 1.0
-t3 = 2 * jrnd.uniform(keys[0], shape=(2, 3)) - 1.0
 
-x = jnp.linspace(-5, 5, 1)
+x = jnp.linspace(-5, 5, 5)
 data = (x, jnp.sin(x))
-q_pars_init3 = {
-    "LC_gs": [jnp.eye(2) for i in range(3)],
-    "mu_gs": [jnp.sin(t1).flatten(), jnp.sin(t2[:, 0] ** 2), jnp.sin(t3[:, 0] ** 2)],
-    "LC_u": jnp.eye(2),
-    "mu_u": jrnd.normal(keys[1], shape=(2,)),
+q_pars_init1 = {
+    "LC_gs": [jnp.eye(2)],
+    "mu_gs": [jnp.sin(t1).flatten()],
+    "LC_u": jnp.eye(5),
+    "mu_u": jrnd.normal(keys[1], shape=(5,)),
 }
-var_model3 = VariationalNVKM(
-    [t1, t2, t3],
-    jnp.linspace(-5, 5, 2).reshape(-1, 1),
+var_model1 = VariationalNVKM(
+    [t1],
+    jnp.linspace(-5, 5, 5).reshape(-1, 1),
     data,
     IndependentGaussians,
-    q_pars_init=q_pars_init3,
-    lsgs=[1.0, 2.0, 1.0],
-    ampgs_init=[1.0, 1.0, 1.0],
+    q_pars_init=q_pars_init1,
+    lsgs=[1.0],
+    ampgs_init=[1.0],
     noise_init=0.01,
-    C=3,
+    C=1,
 )
 
-print(
-    var_model3._compute_bound(data, var_model3.q_of_v.q_pars, var_model3.ampgs, 0.1, 2)
-)
-var_model3.fit(100, 1e-1, 1, 2)
+
+print(var_model1.compute_bound(2))
+print(var_model1.q_pars)
+# %%
+t = jnp.linspace(-10, 10, 100)
+samps = var_model1.sample(t, 2)
+#%%
+plt.plot(t, samps)
+plt.scatter(data[0], data[1])
+plt.show()
+# %%
+var_model1.fit(100, 1e-2, None, 5)
+print(var_model1.compute_bound(2))
+print(var_model1.noise)
+t = jnp.linspace(-5, 5, 100)
+
+#%%
+samps = var_model1.sample(t, 5, key=jrnd.PRNGKey(12))
+plt.plot(t, samps)
+plt.scatter(data[0], data[1])
+plt.show()
 
 # %%
-t = jnp.linspace(-5, 5, 100)
-samps = var_model3._var_sample(t, var_model3.q_of_v.q_pars, var_model3.ampgs, 2)
-plt.plot(t, samps)
+var_model1.plot_samples(t, 10)
 
+
+# %%
+var_model1.plot_filters(jnp.linspace(-3, 3, 100), 30)
 
 # %%

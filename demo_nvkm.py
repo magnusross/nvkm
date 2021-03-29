@@ -70,8 +70,6 @@ var_model3 = VariationalNVKM(
     C=3,
 )
 
-print(var_model3._compute_bound(
-    var_model3.q_of_v.q_pars, var_model3.ampgs, 0.1, 2)
 
 # %timeit model.sample(t, N_s=1)
 #%%
@@ -102,7 +100,7 @@ print(var_model3._compute_bound(
 # )
 # # %%
 # t = jnp.linspace(-20, 20, 50)
-# # %timeit var_model1._var_sample(t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s=2).block_until_ready()
+# # %timeit var_model1._sample(t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s=2).block_until_ready()
 # # %%
 # t = jnp.linspace(-20, 20, 300)
 # samps1 = var_model1._var_sample(t, var_model1.q_of_v.q_pars, var_model1.ampgs, N_s=2)
