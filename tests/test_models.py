@@ -121,7 +121,6 @@ class TestVarNVKM:
     def test_fit(self, set_var_nvkm):
         model = set_var_nvkm
         b1 = model.compute_bound(3)
-        model.fit(30, 1e-1, 1, 3)
+        model.fit(30, 1e-3, 1, 3)
         b2 = model.compute_bound(3)
         assert b1 > b2
-

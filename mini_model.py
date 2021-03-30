@@ -21,7 +21,8 @@ var_model1 = VariationalNVKM(
     jnp.linspace(-5, 5, 5).reshape(-1, 1),
     data,
     IndependentGaussians,
-    q_pars_init=q_pars_init1,
+    q_pars_init=None,
+    q_initializer_pars=0.5,
     lsgs=[1.0],
     ampgs_init=[1.0],
     noise_init=0.01,
@@ -32,29 +33,29 @@ var_model1 = VariationalNVKM(
 print(var_model1.compute_bound(2))
 print(var_model1.q_pars)
 # %%
-t = jnp.linspace(-10, 10, 100)
-samps = var_model1.sample(t, 2)
-#%%
-plt.plot(t, samps)
-plt.scatter(data[0], data[1])
-plt.show()
-# %%
-var_model1.fit(100, 1e-2, None, 5)
-print(var_model1.compute_bound(2))
-print(var_model1.noise)
-t = jnp.linspace(-5, 5, 100)
+# t = jnp.linspace(-10, 10, 100)
+# samps = var_model1.sample(t, 2)
+# #%%
+# plt.plot(t, samps)
+# plt.scatter(data[0], data[1])
+# plt.show()
+# # %%
+# var_model1.fit(100, 1e-2, None, 5)
+# print(var_model1.compute_bound(2))
+# print(var_model1.noise)
+# t = jnp.linspace(-5, 5, 100)
 
-#%%
-samps = var_model1.sample(t, 5, key=jrnd.PRNGKey(12))
-plt.plot(t, samps)
-plt.scatter(data[0], data[1])
-plt.show()
+# #%%
+# samps = var_model1.sample(t, 5, key=jrnd.PRNGKey(12))
+# plt.plot(t, samps)
+# plt.scatter(data[0], data[1])
+# plt.show()
 
-# %%
-var_model1.plot_samples(t, 10)
+# # %%
+# var_model1.plot_samples(t, 10)
 
 
-# %%
-var_model1.plot_filters(jnp.linspace(-3, 3, 100), 30)
+# # %%
+# var_model1.plot_filters(jnp.linspace(-3, 3, 100), 30)
 
 # %%

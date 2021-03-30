@@ -1,5 +1,6 @@
 from functools import partial
 from typing import Callable, List, Tuple, Union
+import logging
 
 import jax.experimental.optimizers as opt
 import jax.numpy as jnp
@@ -7,6 +8,7 @@ import jax.random as jrnd
 import jax.scipy as jsp
 import matplotlib.pyplot as plt
 from jax import jit, vmap, value_and_grad
+
 
 from .integrals import fast_I
 from .settings import JITTER
@@ -132,7 +134,7 @@ class EQApproxGP:
         )(t)
 
         # canonical basis part
-        if self.z == None:
+        if self.v == None:
             pass
         else:
             qs = vmap(lambda thi, bi, wi: self.compute_q(v, self.LKvv, thi, bi, wi))(
@@ -252,7 +254,16 @@ class NVKM:
                         pu=u_gp.pr,
                     )
                 )(t)
-            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
+            )(
+                thetagl,
+                betagl,
+                thetaul,
+                betaul,
+                wgl,
+                qgl,
+                wul,
+                qul,
+            ).T
 
         return samps
 
@@ -268,6 +279,7 @@ class VariationalNVKM(NVKM):
         data: Tuple[jnp.DeviceArray, jnp.DeviceArray],
         q_class: VariationalDistribution,
         q_pars_init: Union[VIPars, None] = None,
+        q_initializer_pars=None,
         likelihood: Callable = gaussain_likelihood,
         N_basis: int = 500,
         C: int = 1,
@@ -296,15 +308,15 @@ class VariationalNVKM(NVKM):
             ampu=ampu,
         )
 
-        self.q_pars = q_pars_init
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
-        if q_pars_init == None:
-            self.q_of_v = q_class(self.p_pars).initialize(data)
-        else:
-            self.q_of_v = q_class(self.p_pars, init_pars=q_pars_init)
 
         self.data = data
         self.likelihood = likelihood
+        self.q_of_v = q_class()
+        if q_pars_init is None:
+            q_pars_init = self.q_of_v.initialize(self, q_initializer_pars)
+
+        self.q_pars = q_pars_init
 
     @partial(jit, static_argnums=(0,))
     def _compute_p_pars(self, ampgs, lsgs, ampu, lsu):
@@ -391,7 +403,16 @@ class VariationalNVKM(NVKM):
                         pu=u_gp.pr,
                     )
                 )(t)
-            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
+            )(
+                thetagl,
+                betagl,
+                thetaul,
+                betaul,
+                wgl,
+                qgl,
+                wul,
+                qul,
+            ).T
 
         return samps
 
@@ -411,10 +432,11 @@ class VariationalNVKM(NVKM):
 
     def compute_bound(self, N_s, key=jrnd.PRNGKey(1)):
         return self._compute_bound(
-            self.data, self.q_of_v.q_pars, self.ampgs, self.noise, N_s, key=key
+            self.data, self.q_pars, self.ampgs, self.noise, N_s, key=key
         )
 
-    def fit(self, its, lr, batch_size, N_s, key=jrnd.PRNGKey(1)):
+    def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
+
         x, y = self.data
 
         opt_init, opt_update, get_params = opt.adam(lr)
@@ -433,22 +455,25 @@ class VariationalNVKM(NVKM):
                 y_b = y
                 x_b = x
 
-            # this ensurse array are lower triangular
-            # should prob go elsewhere
-            for j in range(self.C):
-                dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
-            dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
-
-            for k in dpars.keys():
-                dpars[k] = get_params(opt_state)[k]
-
             # print(get_params(opt_state))
             value, grads = value_and_grad(
                 lambda dp: self._compute_bound(
                     (x_b, y_b), dp["q_pars"], dp["ampgs"], dp["noise"], N_s, key=skey
                 )
             )(dpars)
-            # print(value)
+
+            opt_state = opt_update(i, grads, opt_state)
+
+            for k in dpars.keys():
+
+                if k not in dont_fit:
+                    dpars[k] = get_params(opt_state)[k]
+
+            # this ensurse array are lower triangular
+            # should prob go elsewhere
+            for j in range(self.C):
+                dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
+            dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
@@ -457,11 +482,10 @@ class VariationalNVKM(NVKM):
             elif i % 1 == 0 and i > 1:
                 print(f"it: {i} F: {value} ")
 
-            opt_state = opt_update(i, grads, opt_state)
         # when optimisation complete, set attributes to be new ones
         # and update computations
         for k in dpars.keys():
-            setattr(self, k, get_params(opt_state)[k])
+            setattr(self, k, dpars[k])
 
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
@@ -508,4 +532,3 @@ class VariationalNVKM(NVKM):
         if save:
             plt.savefig("filters.png")
         plt.show()
-

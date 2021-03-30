@@ -181,3 +181,18 @@ def generate_C2_volterra_data(
     rand_idx_te = rand_idx[N_tr:]
 
     return x[rand_idx_tr], y[rand_idx_tr], x[rand_idx_te], y[rand_idx_te]
+
+
+def generate_EQ_data(N=880, key=jax.random.PRNGKey(34)):
+    t = jnp.linspace(-44, 44, N)
+    K = map2matrix(eq_kernel, t, t, 1.0, 1.0)
+    y = jax.random.multivariate_normal(key, jnp.zeros(N), K + 1e-6 * jnp.eye(N))
+    noise = 0.5 * jax.random.normal(key, (N,))
+    yo = y + noise
+
+    return (
+        jnp.concatenate((t[: 440 - 44], t[440 + 44 :])),
+        jnp.concatenate((yo[: 440 - 44], yo[440 + 44 :])),
+        t,
+        y,
+    )
