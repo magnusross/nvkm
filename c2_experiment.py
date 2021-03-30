@@ -58,8 +58,9 @@ dont_fit = []
 if not bool(args.fit_noise):
     dont_fit.append("noise")
 
+var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="samps_pre.png")
+var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="filter_pre.png")
 
 var_model2.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
-print(var_model2.__dict__)
-var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save=True)
-var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save=True)
+var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="samps.png")
+var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="filter.png")

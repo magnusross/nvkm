@@ -134,7 +134,7 @@ class EQApproxGP:
         )(t)
 
         # canonical basis part
-        if self.v == None:
+        if v is None:
             pass
         else:
             qs = vmap(lambda thi, bi, wi: self.compute_q(v, self.LKvv, thi, bi, wi))(
@@ -340,6 +340,7 @@ class VariationalNVKM(NVKM):
 
     def sample_u_gp(self, t, N_s, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, N_s + 1)
+
         v_u = self.q_of_v._sample(self.q_pars, N_s, skey[0])["u"]
 
         return vmap(
@@ -465,7 +466,6 @@ class VariationalNVKM(NVKM):
             opt_state = opt_update(i, grads, opt_state)
 
             for k in dpars.keys():
-
                 if k not in dont_fit:
                     dpars[k] = get_params(opt_state)[k]
 
@@ -479,7 +479,7 @@ class VariationalNVKM(NVKM):
                 print("nan F!!")
                 return get_params(opt_state)
 
-            elif i % 1 == 0 and i > 1:
+            elif i % 10 == 0 and i > 1:
                 print(f"it: {i} F: {value} ")
 
         # when optimisation complete, set attributes to be new ones
@@ -499,7 +499,9 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
+
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
+        # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
         axs[1].scatter(
             self.u_gp.z,
@@ -510,10 +512,10 @@ class VariationalNVKM(NVKM):
         )
         axs[1].legend()
         if save:
-            plt.savefig("samps.png")
+            plt.savefig(save)
         plt.show()
 
-    def plot_filters(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+    def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(13)):
 
         ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps]
         g_samps = self.sample_diag_g_gps(ts, N_s, key=key)
@@ -530,5 +532,5 @@ class VariationalNVKM(NVKM):
             ax.set_title(f"$G_{i}$")
 
         if save:
-            plt.savefig("filters.png")
+            plt.savefig(save)
         plt.show()

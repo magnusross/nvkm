@@ -5,7 +5,7 @@ from nvkm.vi import IndependentGaussians
 import jax.numpy as jnp
 import jax.random as jrnd
 
-parser = argparse.ArgumentParser(description="Compare CPU and GPU times.")
+parser = argparse.ArgumentParser()
 parser.add_argument("--Nvu", default=10, type=int)
 parser.add_argument("--Nvg", default=2, type=int)
 
@@ -36,7 +36,7 @@ var_model1 = VariationalNVKM(
     data,
     IndependentGaussians,
     q_pars_init=None,
-    q_initializer_pars=0.3,
+    q_initializer_pars=1.1,
     lsgs=args.lsgs,
     ampgs_init=args.ampsgs_init,
     noise_init=0.5,
@@ -50,5 +50,5 @@ if not bool(args.fit_noise):
 
 
 var_model1.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
-var_model1.plot_filters(jnp.linspace(-6, 6, 100), 10, save=True)
-var_model1.plot_samples(jnp.linspace(-44, 44, 100), 5, save=True)
+var_model1.plot_samples(jnp.linspace(-44, 44, 100), 5, save="samps.png")
+var_model1.plot_filters(jnp.linspace(-6, 6, 100), 10, save="filter.png")
