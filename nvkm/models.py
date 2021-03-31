@@ -418,7 +418,7 @@ class VariationalNVKM(NVKM):
         return samps
 
     def sample(self, t, N_s, key=jrnd.PRNGKey(1)):
-        return self._sample(t, self.q_pars, self.ampgs, N_s, key=jrnd.PRNGKey(1))
+        return self._sample(t, self.q_pars, self.ampgs, N_s, key=key)
 
     @partial(jit, static_argnums=(0, 5))
     def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key=jrnd.PRNGKey(1)):
