@@ -2,6 +2,9 @@ import argparse
 from nvkm.utils import generate_C2_volterra_data
 from nvkm.models import NVKM, VariationalNVKM
 from nvkm.vi import IndependentGaussians
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import jax.random as jrnd
 

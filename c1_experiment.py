@@ -2,8 +2,11 @@ import argparse
 from nvkm.utils import generate_EQ_data
 from nvkm.models import NVKM, VariationalNVKM
 from nvkm.vi import IndependentGaussians
+from jax.config import config
 import jax.numpy as jnp
 import jax.random as jrnd
+
+config.update("jax_enable_x64", True)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--Nvu", default=10, type=int)

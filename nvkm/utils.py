@@ -2,13 +2,14 @@ from functools import partial
 from typing import Callable, Union, Collection
 import operator
 
+from jax.config import config
 import jax.numpy as jnp
 import jax.scipy as jsp
 from jax import jit, vmap
 import jax
 
 from .settings import JITTER
-
+config.update("jax_enable_x64", True)
 
 @partial(jit, static_argnums=(0,))
 def map2matrix(

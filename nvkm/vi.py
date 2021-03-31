@@ -1,13 +1,16 @@
+from jax.config import config
+
+
 import jax.numpy as jnp
 import jax.scipy as jsp
 import jax.random as jrnd
-from jax import vmap, jit
+from jax import jit
 
 
 from typing import Dict, Union, List
-from .settings import JITTER
 from functools import partial
 
+config.update("jax_enable_x64", True)
 
 VIPars = Dict[str, Union[jnp.DeviceArray, List[jnp.DeviceArray]]]
 

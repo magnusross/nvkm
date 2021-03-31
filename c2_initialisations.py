@@ -2,8 +2,12 @@ import argparse
 from nvkm.utils import generate_C2_volterra_data
 from nvkm.models import NVKM, VariationalNVKM
 from nvkm.vi import IndependentGaussians
+
 import jax.numpy as jnp
 import jax.random as jrnd
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 
 parser = argparse.ArgumentParser(description="Compare CPU and GPU times.")
 parser.add_argument("--Nvu", default=10, type=int)

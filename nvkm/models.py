@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Callable, List, Tuple, Union
 import logging
+from jax.config import config
 
 import jax.experimental.optimizers as opt
 import jax.numpy as jnp
@@ -19,6 +20,8 @@ from .vi import (
     VIPars,
     gaussain_likelihood,
 )
+
+config.update("jax_enable_x64", True)
 
 
 class EQApproxGP:
