@@ -2,10 +2,9 @@ from jax import jit, vmap
 import jax.numpy as jnp
 from jax import lax
 from jax import config
+from .utils import map_reduce, map_reduce_1vec
 
 config.update("jax_enable_x64", True)
-
-from .utils import map_reduce, map_reduce_1vec
 
 
 @jit

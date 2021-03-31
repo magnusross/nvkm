@@ -52,8 +52,8 @@ class IndependentGaussians:
         q_pars["mu_gs"] = [
             gp.sample(gp.z, 1, key=jrnd.PRNGKey(2)).flatten() for gp in model.g_gps
         ]
-        q_pars["mu_u"] = model.u_gp.sample(
-            model.u_gp.z, 1, key=jrnd.PRNGKey(1)
+        q_pars["mu_u"] = model.u_gp._sample(
+            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=jrnd.PRNGKey(1)
         ).flatten()
         return q_pars
 
