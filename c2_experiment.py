@@ -14,6 +14,7 @@ parser.add_argument("--Nvg", default=2, type=int)
 parser.add_argument("--Ndata", default=10, type=int)
 parser.add_argument("--lsgs", default=[1.0, 1.0], nargs="+", type=float)
 parser.add_argument("--lsu", default=1.0, type=float)
+parser.add_argument("--alpha", default=1.0, type=float)
 parser.add_argument("--Nits", default=10, type=int)
 parser.add_argument("--lr", default=1e-2, type=float)
 parser.add_argument("--Nbatch", default=1, type=int)
@@ -53,7 +54,7 @@ var_model2 = VariationalNVKM(
     lsgs=args.lsgs,
     ampgs_init=args.ampsgs_init,
     noise_init=0.4,
-    alpha=0.45,
+    alpha=args.alpha,
     lsu=args.lsu,
     C=2,
 )
@@ -61,9 +62,9 @@ dont_fit = []
 if not bool(args.fit_noise):
     dont_fit.append("noise")
 
-var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="samps_pre.png")
-var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="filter_pre.png")
+# var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="plots/samps_pre.png")
+# var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="plots/c2_fit_filter_pre.png")
 
 var_model2.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
-var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="samps.png")
-var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="filter.png")
+var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="/home/acp20mr/repos/nvkm/plots/c2_fit_samps.png")
+var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="/home/acp20mr/repos/nvkm/plots/c2_fit_filter.png")
