@@ -2,11 +2,12 @@ import argparse
 from nvkm.utils import generate_C2_volterra_data
 from nvkm.models import NVKM, VariationalNVKM
 from nvkm.vi import IndependentGaussians
+
+import jax.numpy as jnp
+import jax.random as jrnd
 from jax.config import config
 
 config.update("jax_enable_x64", True)
-import jax.numpy as jnp
-import jax.random as jrnd
 
 parser = argparse.ArgumentParser(description="Compare CPU and GPU times.")
 parser.add_argument("--Nvu", default=10, type=int)
@@ -14,13 +15,12 @@ parser.add_argument("--Nvg", default=2, type=int)
 parser.add_argument("--Ndata", default=10, type=int)
 parser.add_argument("--lsgs", default=[1.0, 1.0], nargs="+", type=float)
 parser.add_argument("--lsu", default=1.0, type=float)
+parser.add_argument("--ampu", default=1.0, type=float)
 parser.add_argument("--alpha", default=1.0, type=float)
-parser.add_argument("--Nits", default=10, type=int)
-parser.add_argument("--lr", default=1e-2, type=float)
-parser.add_argument("--Nbatch", default=1, type=int)
 parser.add_argument("--ampsgs_init", default=[1.0, 1.0], nargs="+", type=float)
+parser.add_argument("--pname", default="", type=str)
 parser.add_argument("--Ns", default=2, type=int)
-parser.add_argument("--fit_noise", default=1, type=int)
+
 
 args = parser.parse_args()
 
@@ -53,18 +53,19 @@ var_model2 = VariationalNVKM(
     q_initializer_pars=0.5,
     lsgs=args.lsgs,
     ampgs_init=args.ampsgs_init,
+    ampu=args.ampu,
     noise_init=0.4,
     alpha=args.alpha,
     lsu=args.lsu,
     C=2,
 )
-dont_fit = []
-if not bool(args.fit_noise):
-    dont_fit.append("noise")
 
-# var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="plots/samps_pre.png")
-# var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="plots/c2_fit_filter_pre.png")
-
-var_model2.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
-var_model2.plot_samples(jnp.linspace(-30, 30, 100), 5, save="/home/acp20mr/repos/nvkm/plots/c2_fit_samps.png")
-var_model2.plot_filters(jnp.linspace(-6, 6, 100), 10, save="/home/acp20mr/repos/nvkm/plots/c2_fit_filter.png")
+print(var_model2.compute_bound(args.Ns))
+var_model2.plot_samples(
+    jnp.linspace(-30, 30, 100),
+    args.Ns,
+    save="plots/c2_init_samps_" + args.pname + ".png",
+)
+var_model2.plot_filters(
+    jnp.linspace(-6, 6, 100), 10, save="plots/c2_init_filter_" + args.pname + ".png"
+)

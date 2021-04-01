@@ -1,8 +1,10 @@
 from jax import jit, vmap
 import jax.numpy as jnp
 from jax import lax
-
+from jax import config
 from .utils import map_reduce, map_reduce_1vec
+
+config.update("jax_enable_x64", True)
 
 
 @jit
@@ -40,7 +42,18 @@ def integ_2b(t, alpha, p1, z1, p2, z2):
 
 
 def slow_I1(
-    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
+    t,
+    zus,
+    thetag,
+    betag,
+    thetus,
+    betaus,
+    wus,
+    qus,
+    sigg,
+    sigu=1.0,
+    alpha=1.0,
+    pu=1.0,
 ):
     c = thetag.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
@@ -71,7 +84,18 @@ def slow_I1(
 
 @jit
 def fast_I1(
-    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
+    t,
+    zus,
+    thetag,
+    betag,
+    thetus,
+    betaus,
+    wus,
+    qus,
+    sigg,
+    sigu=1.0,
+    alpha=1.0,
+    pu=1.0,
 ):
     Nl = wus.shape[0]  # number of basis functions
 
@@ -144,7 +168,9 @@ def fast_I2(
         vmap(
             lambda zgij: sigu ** 2
             * map_reduce(
-                lambda qi, zui: qi * integ_2b(t, alpha, pg, zgij, pu, zui), qus, zus,
+                lambda qi, zui: qi * integ_2b(t, alpha, pg, zgij, pu, zui),
+                qus,
+                zus,
             )
         )(zg)
     )
@@ -269,4 +295,3 @@ def fast_I(
     )
 
     return o1 + o2
-

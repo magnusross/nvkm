@@ -19,12 +19,12 @@ v = 2 * jnp.cos(z) + z - jnp.sin(z) ** 2
 N_samples = 100
 
 # Make approx GP in 1D case
-gp1D = EQApproxGP(z=z, v=v, amp=1.0, ls=0.5, noise=0.01, N_basis=1000)
+gp1D = EQApproxGP(z=z, v=v, amp=0.01, ls=0.5, noise=0.01, N_basis=1000)
 samps = gp1D.sample(t, Ns=N_samples)
 
 # Get exact mean and cov
 exact_m, exact_cov = utils.exact_gp_posterior(
-    utils.eq_kernel, t, z, v, 1.0, 0.5, noise=0.01
+    utils.eq_kernel, t, z, v, 0.01, 0.5, noise=0.01
 )
 # Sample exactly
 exact_samps = jrnd.multivariate_normal(
@@ -50,6 +50,7 @@ axs[1].title.set_text("Exact Samples")
 axs[2].scatter(z, v, marker="x", c="green", label="Data")
 axs[2].plot(t, samps, c="blue", alpha=0.1)
 axs[2].title.set_text("Approx. Samples")
+plt.savefig("basegp.png")
 plt.show()
 #%%
 print(utils.RMSE(jnp.mean(samps, axis=1), exact_m))

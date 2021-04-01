@@ -1,13 +1,16 @@
+from jax.config import config
+
+
 import jax.numpy as jnp
 import jax.scipy as jsp
 import jax.random as jrnd
-from jax import vmap, jit
+from jax import jit
 
 
 from typing import Dict, Union, List
-from .settings import JITTER
 from functools import partial
 
+config.update("jax_enable_x64", True)
 
 VIPars = Dict[str, Union[jnp.DeviceArray, List[jnp.DeviceArray]]]
 
@@ -33,20 +36,26 @@ class VariationalDistribution:
 
 
 class IndependentGaussians:
-    def __init__(self, p_pars: VIPars, init_pars: Union[VIPars, None] = None):
+    def __init__(self):
         """[summary]
 
         Args:
             init_pars (Dict[str, jnp.DeviceArray]):
-            should have fields "LCu", "mu", 
+            should have fields "LCu", "mu",
         """
         # super().__init__(init_pars)
-        self.p_pars = p_pars
-        self.q_pars = init_pars
-        self.D = len(init_pars["mu_gs"])
 
-    def initialize(self, data):
-        raise NotImplementedError
+    def initialize(self, model, frac):
+        q_pars = {}
+        q_pars["LC_gs"] = [arr * frac for arr in model.p_pars["LK_gs"]]
+        q_pars["LC_u"] = frac * model.p_pars["LK_u"]
+        q_pars["mu_gs"] = [
+            gp.sample(gp.z, 1, key=jrnd.PRNGKey(2)).flatten() for gp in model.g_gps
+        ]
+        q_pars["mu_u"] = model.u_gp._sample(
+            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=jrnd.PRNGKey(1)
+        ).flatten()
+        return q_pars
 
     @partial(jit, static_argnums=(0,))
     def single_KL(self, LC, m, LK):
@@ -61,7 +70,7 @@ class IndependentGaussians:
     @partial(jit, static_argnums=(0,))
     def _KL(self, p_pars, q_pars):
         val = 0.0
-        for i in range(self.D):
+        for i in range(len(q_pars["LC_gs"])):
             val += self.single_KL(
                 q_pars["LC_gs"][i], q_pars["mu_gs"][i], p_pars["LK_gs"][i]
             )
@@ -70,10 +79,11 @@ class IndependentGaussians:
 
     @partial(jit, static_argnums=(0, 2))
     def _sample(self, q_pars, N_s, key):
-        keys = jrnd.split(key, self.D + 1)
+        D = len(q_pars["LC_gs"])
+        keys = jrnd.split(key, D + 1)
         samps_dict = {"u": None, "gs": []}
 
-        for i in range(self.D):
+        for i in range(D):
             LC_g = q_pars["LC_gs"][i]
 
             samps_dict["gs"].append(
@@ -92,7 +102,7 @@ class IndependentGaussians:
 @jit
 def gaussain_likelihood(y, samples, noise):
     """
-    gaussian likelihood 
+    gaussian likelihood
     """
     Nt = samples.shape[1]
     Ns = samples.shape[0]

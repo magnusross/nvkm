@@ -1,12 +1,15 @@
 from functools import partial
 from typing import Callable, List, Tuple, Union
-
+import logging
+from jax.config import config
+import pickle
 import jax.experimental.optimizers as opt
 import jax.numpy as jnp
 import jax.random as jrnd
 import jax.scipy as jsp
 import matplotlib.pyplot as plt
 from jax import jit, vmap, value_and_grad
+
 
 from .integrals import fast_I
 from .settings import JITTER
@@ -17,6 +20,8 @@ from .vi import (
     VIPars,
     gaussain_likelihood,
 )
+
+config.update("jax_enable_x64", True)
 
 
 class EQApproxGP:
@@ -93,8 +98,8 @@ class EQApproxGP:
         return jrnd.uniform(key, shape, maxval=2 * jnp.pi)
 
     @partial(jit, static_argnums=(0, 2))
-    def sample_ws(self, key, shape):
-        return jrnd.normal(key, shape)
+    def sample_ws(self, key, shape, amp):
+        return amp * jrnd.normal(key, shape)
 
     @partial(jit, static_argnums=(0,))
     def phi(self, t, theta, beta):
@@ -122,7 +127,7 @@ class EQApproxGP:
         skey = jrnd.split(key, 3)
         thetas = self.sample_thetas(skey[0], (Ns, self.N_basis, self.D), self.ls)
         betas = self.sample_betas(skey[1], (Ns, self.N_basis))
-        ws = self.sample_ws(skey[2], (Ns, self.N_basis))
+        ws = self.sample_ws(skey[2], (Ns, self.N_basis), amp)
 
         # fourier basis part
         samps = vmap(
@@ -132,7 +137,7 @@ class EQApproxGP:
         )(t)
 
         # canonical basis part
-        if self.z == None:
+        if v is None:
             pass
         else:
             qs = vmap(lambda thi, bi, wi: self.compute_q(v, self.LKvv, thi, bi, wi))(
@@ -146,6 +151,7 @@ class EQApproxGP:
         return samps
 
     def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
+
         return self._sample(t, self.v, self.amp, Ns, key=key)
 
 
@@ -210,7 +216,7 @@ class NVKM:
         u_gp = self.u_gp
         thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
         betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
-        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis))
+        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), u_gp.amp)
 
         qul = vmap(lambda thi, bi, wi: u_gp.compute_q(vu, u_gp.LKvv, thi, bi, wi))(
             thetaul, betaul, wul
@@ -224,7 +230,7 @@ class NVKM:
                 skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
             )
             betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
-            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
+            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
 
             _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
             qgl = vmap(
@@ -252,7 +258,16 @@ class NVKM:
                         pu=u_gp.pr,
                     )
                 )(t)
-            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
+            )(
+                thetagl,
+                betagl,
+                thetaul,
+                betaul,
+                wgl,
+                qgl,
+                wul,
+                qul,
+            ).T
 
         return samps
 
@@ -268,6 +283,7 @@ class VariationalNVKM(NVKM):
         data: Tuple[jnp.DeviceArray, jnp.DeviceArray],
         q_class: VariationalDistribution,
         q_pars_init: Union[VIPars, None] = None,
+        q_initializer_pars=None,
         likelihood: Callable = gaussain_likelihood,
         N_basis: int = 500,
         C: int = 1,
@@ -278,33 +294,51 @@ class VariationalNVKM(NVKM):
         lsu: float = 1.0,
         ampu: float = 1.0,
     ):
-        vgs = [None] * C
-        vu = None
 
-        super().__init__(
-            zgs=zgs,
-            zu=zu,
-            vgs=vgs,
-            vu=vu,
-            N_basis=N_basis,
-            C=C,
-            ampgs=ampgs_init,
-            noise=noise_init,
-            alpha=alpha,
-            lsgs=lsgs,
-            lsu=lsu,
-            ampu=ampu,
-        )
+        self.zgs = zgs
+        self.vgs = [None] * C
+        self.zu = zu
+        self.vu = None
 
-        self.q_pars = q_pars_init
+        self.N_basis = N_basis
+        self.C = C
+        self.noise = noise_init
+        self.alpha = alpha
+
+        self.lsgs = lsgs
+        self.lsu = lsu
+        self.ampgs = ampgs_init
+        self.ampu = ampu
+
+        self.g_gps = self.set_G_gps(ampgs_init, lsgs)
+        self.u_gp = self.set_u_gp(ampu, lsu)
+
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
-        if q_pars_init == None:
-            self.q_of_v = q_class(self.p_pars).initialize(data)
-        else:
-            self.q_of_v = q_class(self.p_pars, init_pars=q_pars_init)
-
         self.data = data
         self.likelihood = likelihood
+        self.q_of_v = q_class()
+        if q_pars_init is None:
+            q_pars_init = self.q_of_v.initialize(self, q_initializer_pars)
+        self.q_pars = q_pars_init
+
+    def set_G_gps(self, ampgs, lsgs):
+        gps = [
+            EQApproxGP(
+                z=self.zgs[i],
+                v=self.vgs[i],
+                N_basis=self.N_basis,
+                D=i + 1,
+                ls=lsgs[i],
+                amp=ampgs[i],
+            )
+            for i in range(self.C)
+        ]
+        return gps
+
+    def set_u_gp(self, ampu, lsu):
+        return EQApproxGP(
+            z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
+        )
 
     @partial(jit, static_argnums=(0,))
     def _compute_p_pars(self, ampgs, lsgs, ampu, lsu):
@@ -328,6 +362,7 @@ class VariationalNVKM(NVKM):
 
     def sample_u_gp(self, t, N_s, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, N_s + 1)
+
         v_u = self.q_of_v._sample(self.q_pars, N_s, skey[0])["u"]
 
         return vmap(
@@ -347,7 +382,7 @@ class VariationalNVKM(NVKM):
         # print(type((N_s, u_gp.N_basis, 1)))
         thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
         betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
-        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis))
+        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), u_gp.amp)
 
         qul = vmap(
             lambda vui, thi, bi, wi: u_gp.compute_q(vui, u_gp.LKvv, thi, bi, wi)
@@ -362,7 +397,7 @@ class VariationalNVKM(NVKM):
                 skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
             )
             betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
-            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis))
+            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
 
             # print(G_gp_i.LKvv, G_Lkvv)
             _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
@@ -391,12 +426,21 @@ class VariationalNVKM(NVKM):
                         pu=u_gp.pr,
                     )
                 )(t)
-            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
+            )(
+                thetagl,
+                betagl,
+                thetaul,
+                betaul,
+                wgl,
+                qgl,
+                wul,
+                qul,
+            ).T
 
         return samps
 
     def sample(self, t, N_s, key=jrnd.PRNGKey(1)):
-        return self._sample(t, self.q_pars, self.ampgs, N_s, key=jrnd.PRNGKey(1))
+        return self._sample(t, self.q_pars, self.ampgs, N_s, key=key)
 
     @partial(jit, static_argnums=(0, 5))
     def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key=jrnd.PRNGKey(1)):
@@ -411,10 +455,11 @@ class VariationalNVKM(NVKM):
 
     def compute_bound(self, N_s, key=jrnd.PRNGKey(1)):
         return self._compute_bound(
-            self.data, self.q_of_v.q_pars, self.ampgs, self.noise, N_s, key=key
+            self.data, self.q_pars, self.ampgs, self.noise, N_s, key=key
         )
 
-    def fit(self, its, lr, batch_size, N_s, key=jrnd.PRNGKey(1)):
+    def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
+
         x, y = self.data
 
         opt_init, opt_update, get_params = opt.adam(lr)
@@ -433,35 +478,36 @@ class VariationalNVKM(NVKM):
                 y_b = y
                 x_b = x
 
-            # this ensurse array are lower triangular
-            # should prob go elsewhere
-            for j in range(self.C):
-                dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
-            dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
-
-            for k in dpars.keys():
-                dpars[k] = get_params(opt_state)[k]
-
             # print(get_params(opt_state))
             value, grads = value_and_grad(
                 lambda dp: self._compute_bound(
                     (x_b, y_b), dp["q_pars"], dp["ampgs"], dp["noise"], N_s, key=skey
                 )
             )(dpars)
-            # print(value)
+
+            opt_state = opt_update(i, grads, opt_state)
+
+            for k in dpars.keys():
+                if k not in dont_fit:
+                    dpars[k] = get_params(opt_state)[k]
+
+            # this ensurse array are lower triangular
+            # should prob go elsewhere
+            for j in range(self.C):
+                dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
+            dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
                 return get_params(opt_state)
 
-            elif i % 1 == 0 and i > 1:
+            elif i % 10 == 0:
                 print(f"it: {i} F: {value} ")
 
-            opt_state = opt_update(i, grads, opt_state)
         # when optimisation complete, set attributes to be new ones
         # and update computations
         for k in dpars.keys():
-            setattr(self, k, get_params(opt_state)[k])
+            setattr(self, k, dpars[k])
 
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
@@ -475,7 +521,9 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
+
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
+        # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
         axs[1].scatter(
             self.u_gp.z,
@@ -486,10 +534,10 @@ class VariationalNVKM(NVKM):
         )
         axs[1].legend()
         if save:
-            plt.savefig("samps.png")
+            plt.savefig(save)
         plt.show()
 
-    def plot_filters(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+    def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(13)):
 
         ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps]
         g_samps = self.sample_diag_g_gps(ts, N_s, key=key)
@@ -506,6 +554,10 @@ class VariationalNVKM(NVKM):
             ax.set_title(f"$G_{i}$")
 
         if save:
-            plt.savefig("filters.png")
+            plt.savefig(save)
         plt.show()
 
+    def save(self, f_name):
+        # with open(f_name, 'wb') as output:  # Overwrites any existing file.
+        # pickle.dump(self.__dict__, output, pickle.HIGHEST_PROTOCOL)
+        jnp.savez(f_name, **self.__dict__)
