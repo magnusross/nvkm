@@ -15,12 +15,12 @@ parser.add_argument("--Nvg", default=2, type=int)
 parser.add_argument("--lsgs", default=[1.0, 1.0], nargs="+", type=float)
 parser.add_argument("--lsu", default=1.0, type=float)
 parser.add_argument("--Nits", default=10, type=int)
-parser.add_argument("--lr", default=1e-2, type=float)
+parser.add_argument("--lr", default=3e-2, type=float)
 parser.add_argument("--Nbatch", default=1, type=int)
 parser.add_argument("--ampsgs_init", default=[1.0, 1.0], nargs="+", type=float)
 parser.add_argument("--Ns", default=2, type=int)
 parser.add_argument("--fit_noise", default=1, type=int)
-
+parser.add_argument("--f_name", default="test", type=str)
 
 args = parser.parse_args()
 
@@ -40,10 +40,10 @@ var_model1 = VariationalNVKM(
     data,
     IndependentGaussians,
     q_pars_init=None,
-    q_initializer_pars=1.1,
+    q_initializer_pars=0.3,
     lsgs=args.lsgs,
     ampgs_init=args.ampsgs_init,
-    noise_init=0.5,
+    noise_init=0.3,
     alpha=0.45,
     C=1,
 )
@@ -54,5 +54,10 @@ if not bool(args.fit_noise):
 
 
 var_model1.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
-var_model1.plot_samples(jnp.linspace(-44, 44, 100), 2, save="samps.png")
-var_model1.plot_filters(jnp.linspace(-6, 6, 100), 10, save="filter.png")
+var_model1.save(args.f_name + "model.pkl")
+var_model1.plot_samples(
+    jnp.linspace(-44, 44, 100), 2, save=args.f_name + "fit_samps.png"
+)
+var_model1.plot_filters(
+    jnp.linspace(-6, 6, 100), 10, save=args.f_name + "fit_filter.png"
+)

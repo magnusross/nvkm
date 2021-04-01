@@ -188,7 +188,7 @@ def generate_EQ_data(N=880, key=jax.random.PRNGKey(34)):
     t = jnp.linspace(-44, 44, N)
     K = map2matrix(eq_kernel, t, t, 1.0, 1.0)
     y = jax.random.multivariate_normal(key, jnp.zeros(N), K + 1e-6 * jnp.eye(N))
-    noise = 0.5 * jax.random.normal(key, (N,))
+    noise = 0.3 * jax.random.normal(key, (N,))
     yo = y + noise
 
     return (

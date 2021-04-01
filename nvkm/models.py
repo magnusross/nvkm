@@ -2,7 +2,7 @@ from functools import partial
 from typing import Callable, List, Tuple, Union
 import logging
 from jax.config import config
-
+import pickle
 import jax.experimental.optimizers as opt
 import jax.numpy as jnp
 import jax.random as jrnd
@@ -556,3 +556,8 @@ class VariationalNVKM(NVKM):
         if save:
             plt.savefig(save)
         plt.show()
+
+    def save(self, f_name):
+        # with open(f_name, 'wb') as output:  # Overwrites any existing file.
+        # pickle.dump(self.__dict__, output, pickle.HIGHEST_PROTOCOL)
+        jnp.savez(f_name, **self.__dict__)
