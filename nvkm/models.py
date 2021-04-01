@@ -13,7 +13,7 @@ from jax import jit, vmap, value_and_grad
 
 from .integrals import fast_I
 from .settings import JITTER
-from .utils import eq_kernel, l2p, map2matrix
+from .utils import eq_kernel, l2p, map2matrix, vmap_scan
 from .vi import (
     IndependentGaussians,
     VariationalDistribution,
@@ -258,16 +258,7 @@ class NVKM:
                         pu=u_gp.pr,
                     )
                 )(t)
-            )(
-                thetagl,
-                betagl,
-                thetaul,
-                betaul,
-                wgl,
-                qgl,
-                wul,
-                qul,
-            ).T
+            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
 
         return samps
 
@@ -405,8 +396,8 @@ class VariationalNVKM(NVKM):
                 lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
             )(v_samps["gs"][i], thetagl, betagl, wgl)
             # samps += jnp.zeros((len(t), N_s))
-            samps += vmap(
-                lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap(
+            samps += vmap_scan(
+                lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap_scan(
                     lambda ti: fast_I(
                         ti,
                         G_gp_i.z,
@@ -424,9 +415,9 @@ class VariationalNVKM(NVKM):
                         alpha=self.alpha,
                         pg=G_gp_i.pr,
                         pu=u_gp.pr,
-                    )
-                )(t)
-            )(
+                    ),
+                    t,
+                ),
                 thetagl,
                 betagl,
                 thetaul,

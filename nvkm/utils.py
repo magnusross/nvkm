@@ -9,7 +9,9 @@ from jax import jit, vmap
 import jax
 
 from .settings import JITTER
+
 config.update("jax_enable_x64", True)
+
 
 @partial(jit, static_argnums=(0,))
 def map2matrix(
@@ -38,9 +40,17 @@ def map_reduce(
     f: Callable,
     *arrs: jnp.DeviceArray,
     init_val: float = 0.0,
-    op: Callable = operator.add
+    op: Callable = operator.add,
 ):
-    return jnp.sum(vmap(f)(*arrs))
+
+    init_val = jnp.zeros_like(f(*[a[0] for a in arrs]))
+
+    # @jit
+    def body_func(carry, x):
+        return op(carry, f(*x)), 0.0
+
+    return jax.lax.scan(body_func, init_val, arrs)[0]
+    # return jnp.sum(vmap(f)(*arrs))
     # sarr = jnp.vstack((arr.flatten() for arr in arrs)).T
     # # sarr = jnp.vstack(arrs).T
 
@@ -51,14 +61,31 @@ def map_reduce(
 
 
 @partial(jit, static_argnums=(0,))
+def vmap_scan(f, *arrs):
+    def body_func(carry, x):
+        return carry, f(*x)
+
+    return jax.lax.scan(body_func, 0.0, arrs)[1]
+
+
+# def map_reduce_scan(
+#     f: Callable,
+#     *arrs: jnp.DeviceArray,
+#     init_val: float = 0.0,
+#     op: Callable = operator.add,
+# ):
+#     def body_func(carry, x):
+
+#         return carry + f(*x), carry
+
+#     return jax.lax.scan(body_func, 0.0, arrs)[0]
+
+
+@partial(jit, static_argnums=(0,))
 def map_reduce_1vec(
-    f: Callable,
-    arr2D: jnp.DeviceArray,
-    *arrs: jnp.DeviceArray,
-    init_val: float = 0.0,
-    op: Callable = operator.add
+    f: Callable, arr2D: jnp.DeviceArray, *arrs: jnp.DeviceArray,
 ):
-    return jnp.sum(vmap(f)(arr2D, *arrs))
+    # return jnp.sum(vmap(f)(arr2D, *arrs))
     # sarr = jnp.vstack((arr.flatten() for arr in arrs)).T
     # # sarr = jnp.vstack(arrs).T
 
@@ -66,6 +93,15 @@ def map_reduce_1vec(
     #     return op(val, f(arr2D[i], *sarr[i]))
 
     # return jax.lax.fori_loop(0, sarr.shape[0], body_func, init_val)
+    init_val = jnp.zeros_like(f(arr2D[0], *[a[0] for a in arrs]))
+
+    # @jit
+    def body_func(carry, x):
+        # print(f(*x))
+        # print(carry)
+        return carry + f(x[0], *x[1]), 0.0
+
+    return jax.lax.scan(body_func, init_val, (arr2D, arrs))[0]
 
 
 @jit
