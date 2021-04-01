@@ -397,8 +397,8 @@ class VariationalNVKM(NVKM):
             )(v_samps["gs"][i], thetagl, betagl, wgl)
             # samps += jnp.zeros((len(t), N_s))
             samps += vmap_scan(
-                lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap_scan(
-                    lambda ti: fast_I(
+                lambda ti: vmap(
+                    lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
                         ti,
                         G_gp_i.z,
                         u_gp.z,
@@ -415,17 +415,9 @@ class VariationalNVKM(NVKM):
                         alpha=self.alpha,
                         pg=G_gp_i.pr,
                         pu=u_gp.pr,
-                    ),
-                    t,
-                ),
-                thetagl,
-                betagl,
-                thetaul,
-                betaul,
-                wgl,
-                qgl,
-                wul,
-                qul,
+                    )
+                )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
+                t,
             ).T
 
         return samps
