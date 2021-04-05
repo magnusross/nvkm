@@ -45,15 +45,16 @@ class IndependentGaussians:
         """
         # super().__init__(init_pars)
 
-    def initialize(self, model, frac):
+    def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
+        skey = jrnd.split(key, 2)
         q_pars = {}
         q_pars["LC_gs"] = [arr * frac for arr in model.p_pars["LK_gs"]]
         q_pars["LC_u"] = frac * model.p_pars["LK_u"]
         q_pars["mu_gs"] = [
-            gp.sample(gp.z, 1, key=jrnd.PRNGKey(2)).flatten() for gp in model.g_gps
+            gp.sample(gp.z, 1, key=skey[0]).flatten() for gp in model.g_gps
         ]
         q_pars["mu_u"] = model.u_gp._sample(
-            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=jrnd.PRNGKey(1)
+            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=skey[1]
         ).flatten()
         return q_pars
 

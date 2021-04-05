@@ -365,10 +365,9 @@ class VariationalNVKM(NVKM):
     @partial(jit, static_argnums=(0, 4))
     def _sample(self, t, q_pars, ampgs, N_s, key=jrnd.PRNGKey(1)):
 
-        v_samps = self.q_of_v._sample(q_pars, N_s, key)
-        # samps = self._sample(t, v_samps["gs"], v_samps["u"], ampgs, N_s)
+        skey = jrnd.split(key, 5)
+        v_samps = self.q_of_v._sample(q_pars, N_s, skey[4])
 
-        skey = jrnd.split(key, 4)
         u_gp = self.u_gp
         # print(type((N_s, u_gp.N_basis, 1)))
         thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
@@ -418,7 +417,7 @@ class VariationalNVKM(NVKM):
                     )
                 )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
                 t,
-            ).T
+            )
 
         return samps
 
@@ -451,12 +450,11 @@ class VariationalNVKM(NVKM):
         opt_state = opt_init(dpars)
 
         for i in range(its):
-            key, skey = jrnd.split(key)
+            skey, key = jrnd.split(key, 2)
             if batch_size:
                 rnd_idx = jrnd.choice(key, len(y), shape=(batch_size,))
                 y_b = y[rnd_idx]
                 x_b = x[rnd_idx]
-            # print(rnd_idx)
             else:
                 y_b = y
                 x_b = x
@@ -467,13 +465,12 @@ class VariationalNVKM(NVKM):
                     (x_b, y_b), dp["q_pars"], dp["ampgs"], dp["noise"], N_s, key=skey
                 )
             )(dpars)
-
             opt_state = opt_update(i, grads, opt_state)
 
             for k in dpars.keys():
                 if k not in dont_fit:
                     dpars[k] = get_params(opt_state)[k]
-
+#             print(dpars["q_pars"]["mu_u"])
             # this ensurse array are lower triangular
             # should prob go elsewhere
             for j in range(self.C):
@@ -504,7 +501,8 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
-
+        
+        print(self.q_pars["mu_u"])
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
         # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)

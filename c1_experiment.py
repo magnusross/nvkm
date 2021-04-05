@@ -56,7 +56,7 @@ if not bool(args.fit_noise):
 var_model1.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
 # var_model1.save(args.f_name + "model.pkl")
 var_model1.plot_samples(
-    jnp.linspace(-44, 44, 100), 2, save=args.f_name + "fit_samps.png"
+    jnp.linspace(-44, 44, 250), 10, save=args.f_name + "fit_samps.png"
 )
 var_model1.plot_filters(
     jnp.linspace(-6, 6, 100), 10, save=args.f_name + "fit_filter.png"

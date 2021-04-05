@@ -203,7 +203,7 @@ def generate_C2_volterra_data(
         return jnp.sum(k2(t - taux, t - tauy) * jnp.outer(u, u)) * 0.1
 
     N = N_te + N_tr
-    x = jnp.linspace(-30, 30, N)
+    x = jnp.linspace(-15, 15, N)
     if C == 1:
         y = jnp.array([int1(xi) for xi in x])
     elif C == 2:
