@@ -5,8 +5,11 @@ import operator
 from jax.config import config
 import jax.numpy as jnp
 import jax.scipy as jsp
+import jax.random as jrnd
 from jax import jit, vmap
 import jax
+import matplotlib.pyplot as plt 
+
 
 from .settings import JITTER
 
@@ -159,8 +162,42 @@ def method(cls):
         return f
 
     return decorator
+    
+def plot_c2_filter_multi(model, t, N_s, key=jrnd.PRNGKey(1), save=None, variational=False):
+    
+    tp = jnp.vstack((t, t)).T
+    tn = jnp.vstack((t, -t)).T
+    
+    if variational:
+        skey = jrnd.split(key, N_s + 1)
+        gp = model.g_gps[1]
 
+        v_samps = model.q_of_v._sample(model.q_pars, N_s, skey[0])["gs"][1]
 
+        
+        sampsp = vmap(lambda vi, keyi: gp._sample(tp, vi, gp.amp, 1, keyi).flatten())(
+                v_samps, skey[1:]
+            ).T
+        sampsn = vmap(lambda vi, keyi: gp._sample(tn, vi, gp.amp, 1, keyi).flatten())(
+                v_samps, skey[1:]
+            ).T
+    else:
+        sampsp = model.g_gps[1].sample(tp, N_s, key=key)
+        sampsn = model.g_gps[1].sample(tn, N_s, key=key)
+    yp = (sampsp.T * jnp.exp(-model.alpha * (t) ** 2)).T
+    yn = (sampsn.T * jnp.exp(-model.alpha * (t) ** 2)).T
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    axs[0].plot(t, yp, c="red", alpha=0.5)
+    axs[0].set_title("Main Diag")
+    axs[1].plot(t, yn, c="red", alpha=0.5)
+    axs[1].set_title("Off Diag")
+    if save:	
+        plt.savefig(save)
+    plt.show()
+
+    
+    
+    
 def exact_gp_posterior(kf, ts, zs, us, *kf_args, noise=0.0, jitter=JITTER):
 
     Koo = map2matrix(kf, zs, zs, *kf_args) + (noise + JITTER) * jnp.eye(len(zs))

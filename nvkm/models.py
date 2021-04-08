@@ -264,6 +264,29 @@ class NVKM:
 
     def sample(self, t, N_s=10, key=jrnd.PRNGKey(1)):
         return self._sample(t, self.vgs, self.vu, self.ampgs, N_s=N_s, key=key)
+        
+    def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+        skey = jrnd.split(key, 2)
+
+        fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+        samps = self.sample(t, N_s, key=skey[0])
+        axs[0].plot(t, samps, c="green", alpha=0.5)
+        axs[0].legend()
+        
+        u_samps = self.u_gp.sample(t, N_s, key=skey[1])
+
+        axs[1].plot(t, u_samps, c="blue", alpha=0.5)
+        axs[1].scatter(
+            self.u_gp.z,
+            self.u_gp.v,
+            label="Inducing Points",
+            marker="x",
+            c="green",
+        )
+        axs[1].legend()
+        if save:
+            plt.savefig(save)
+        plt.show()
 
 
 class VariationalNVKM(NVKM):
@@ -344,6 +367,7 @@ class VariationalNVKM(NVKM):
     def sample_diag_g_gps(self, ts, N_s, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, N_s + 1)
         v_gs = self.q_of_v._sample(self.q_pars, N_s, skey[0])["gs"]
+#         print(v_gs[1][1])
         return [
             vmap(lambda vi, keyi: gp._sample(ts[i], vi, gp.amp, 1, keyi).flatten())(
                 v_gs[i], skey[1:]
@@ -481,7 +505,7 @@ class VariationalNVKM(NVKM):
                 print("nan F!!")
                 return get_params(opt_state)
 
-            elif i % 10 == 0:
+            elif i % 2 == 0:
                 print(f"it: {i} F: {value} ")
 
         # when optimisation complete, set attributes to be new ones
@@ -502,7 +526,7 @@ class VariationalNVKM(NVKM):
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
         
-        print(self.q_pars["mu_u"])
+#         print(self.q_pars["mu_u"])s
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
         # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
@@ -518,13 +542,12 @@ class VariationalNVKM(NVKM):
             plt.savefig(save)
         plt.show()
 
-    def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(13)):
+    def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(1)):
 
         ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps]
         g_samps = self.sample_diag_g_gps(ts, N_s, key=key)
 
         fig, axs = plt.subplots(self.C, 1, figsize=(8, 5 * self.C))
-
         for i in range(self.C):
             if self.C == 1:
                 ax = axs
