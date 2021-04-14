@@ -18,7 +18,7 @@ noise = 0.01
 Nvu = 100
 Nvg = 27
 Ndata = 30
-alpha = 10.0
+alpha = 0.45
 Nplot = 100
 
 f_name = "plots/tl"
@@ -27,10 +27,10 @@ lsgs = [1.0, 1.0]
 ampsgs = [1.0, 1.0]
 ampu = 1.0
 lsu = 0.1
-tip = jnp.linspace(-1, 1, Nvg)
+tip = jnp.linspace(-3, 3, Nvg)
 
 tip1 = tip.reshape(-1, 1)
-tf = jnp.linspace(-1, 1, int(jnp.sqrt(Nvg)))
+tf = jnp.linspace(-3, 3, int(jnp.sqrt(Nvg)))
 tm2 = jnp.meshgrid(tf, tf)
 tip2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 
@@ -45,7 +45,7 @@ model2 = NVKM(
     ampgs=ampsgs,
     ampu=ampu,
     alpha=alpha,
-    N_basis=500,
+    N_basis=50,
 )
 model2.vgs = [
     model2.g_gps[0].sample(model2.zgs[0], 1).flatten(),
@@ -55,9 +55,9 @@ model2.vu = model2.u_gp.sample(model2.zu, 1).flatten()
 model2.g_gps = model2.set_G_gps(ampsgs, lsgs)
 model2.u_gp = model2.set_u_gp(ampu, lsu)
 
-xf = jnp.linspace(-1, 1, 200)
+xf = jnp.linspace(-5, 5, 200)
 
-# plot_c2_filter_multi(model2, xf, 15)
+plot_c2_filter_multi(model2, xf, 15)
 # plt.show()
 
 
@@ -86,9 +86,9 @@ model2.plot_samples(x, 5, key=jrnd.PRNGKey(101001010))
 # plt.plot(xf, model2.g_gps[1].sample(jnp.vstack((xf, xf)).T, 10))
 # plt.scatter(tip, model2.vgs[1])
 #%%
-s2 = model2.sample(x, 2)
+s2 = model2.sample(x, 5)
 model2.C = 1
-s1 = model2.sample(x, 2)
+s1 = model2.sample(x, 5)
 model2.C = 2
 # %%
 fig = plt.figure(figsize=(10, 5))
@@ -99,19 +99,19 @@ plt.legend()
 plt.show()
 
 # %%
-"""
+
 # %%
-Nvu = 11
+Nvu = 20
 Nvg = 27
 Ndata = 30
-alpha = 10.0
+alpha = 3.0
 Nplot = 100
 
-lsgs = [1.0, 1.0, 1.0]
+lsgs = [1.0, 1.0, 0.1]
 
-ampsgs = [1.0, 1.0, 1.0]
+ampsgs = [1.0, 1.0, 10.0]
 ampu = 1.0
-lsu = 0.1
+lsu = 0.5
 tip = jnp.linspace(-1, 1, Nvg)
 tip1 = tip.reshape(-1, 1)
 tip2 = 2 * jrnd.uniform(jrnd.PRNGKey(101), shape=(Nvg, 2)) - 1
@@ -120,7 +120,7 @@ tip3 = 2 * jrnd.uniform(jrnd.PRNGKey(103), shape=(Nvg, 3)) - 1
 model3d = NVKM(
     zgs=[tip1, tip2, tip3],
     vgs=[None, None, None],
-    zu=jnp.arange(-0.6, 0.6, 0.1).reshape(-1, 1),
+    zu=jnp.linspace(-6, 3, Nvu).reshape(-1, 1),
     vu=None,
     C=3,
     lsgs=lsgs,
@@ -128,7 +128,7 @@ model3d = NVKM(
     ampgs=ampsgs,
     ampu=ampu,
     alpha=alpha,
-    N_basis=5,
+    N_basis=100,
 )
 model3d.vgs = [
     model3d.g_gps[0].sample(model3d.zgs[0], 1).flatten(),
@@ -141,17 +141,17 @@ model3d.u_gp = model3d.set_u_gp(ampu, lsu)
 
 xf = jnp.linspace(-1, 1, 200)
 
-x = jnp.array([-0.4, 0.4])
 
 #%%
-model3d._slow_sample(x, model3d.vgs, model3d.vu, ampsgs, N_s=3)
+
 # plot_c2_filter_multi(model3d, xf, 15)
 # plt.show()
 #%%
 
+x = jnp.linspace(-6, 3, Nplot)
 model3d.plot_samples(x, 3, key=jrnd.PRNGKey(101001010))
 
 # %%
-model3d._sample(x, model3d.vgs, model3d.vu, ampsgs, N_s=3)
+
 # %%
-"""
+

@@ -1,2 +1,2 @@
 global JITTER
-JITTER = 1e-10
+JITTER = 1e-6
