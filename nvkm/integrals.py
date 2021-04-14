@@ -63,7 +63,6 @@ def slow_I1(
         o1 *= opa + sigu ** 2 * opb
         o2 *= ona + sigu ** 2 * onb
     out = 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
-    print("o1:", out)
     return out
 
 
@@ -113,7 +112,6 @@ def slow_I2(
 
         o1 *= os1
         o2 *= sigu ** 2 * os2
-    print(sigg ** 2 * (o1 + o2))
     return sigg ** 2 * (o1 + o2)
 
 
@@ -196,7 +194,6 @@ def slow_I(
             pu=pu,
             pg=pg,
         )
-    print(out)
     return out
 
 
