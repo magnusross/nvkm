@@ -6,14 +6,14 @@ import pytest
 
 # all answers from Mathematica exact inegrations
 def test_integ_1a():
-    ans = jax.lax.complex(-0.18947591534594296, -0.9409343823354436)
-    ours = integrals.integ_1a(1.0, 1.2, 1.3, 1.4, 1.5, 1.6)
+    ans = jax.lax.complex(-0.9558973454319415, 0.15076667809523533)
+    ours = integrals.integ_1a(1.0, 1.2, 1.3, 1.4, 1.5)
     assert jnp.isclose(ours, ans)
 
 
 def test_integ_1b():
-    ans = jax.lax.complex(0.41217993289082855, 0.5971748133823835)
-    ours = integrals.integ_1b(1.0, 1.2, 1.3, 1.4, 1.5, 1.6)
+    ans = jax.lax.complex(0.7467893006351713, -0.27259937436632203)
+    ours = integrals.integ_1b(1.0, 1.2, 1.3, 1.4, 1.5)
     assert jnp.isclose(ours, ans)
 
 
@@ -60,9 +60,9 @@ def test_I1(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.0,
-        alpha=1.0,
-        pu=1.0,
+        sigu=1.1,
+        alpha=1.2,
+        pu=1.3,
     )
     fi1 = integrals.fast_I1(
         data_maker["t"],
@@ -74,10 +74,11 @@ def test_I1(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.0,
-        alpha=1.0,
-        pu=1.0,
+        sigu=1.1,
+        alpha=1.2,
+        pu=1.3,
     )
+
     assert jnp.isclose(si1, fi1)
 
 
@@ -91,10 +92,10 @@ def test_I2(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.0,
-        alpha=1.0,
-        pg=1.0,
-        pu=1.0,
+        sigu=1.1,
+        alpha=1.2,
+        pg=1.3,
+        pu=1.4,
     )
     fi2 = integrals.fast_I2(
         data_maker["t"],
@@ -105,10 +106,10 @@ def test_I2(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.0,
-        alpha=1.0,
-        pg=1.0,
-        pu=1.0,
+        sigu=1.1,
+        alpha=1.2,
+        pg=1.3,
+        pu=1.4,
     )
     assert jnp.isclose(si2, fi2)
 
@@ -127,10 +128,10 @@ def test_I(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.0,
-        alpha=1.0,
-        pu=1.0,
-        pg=1.0,
+        sigu=1.1,
+        alpha=1.2,
+        pg=1.3,
+        pu=1.4,
     )
     fi = integrals.fast_I(
         data_maker["t"],
@@ -145,9 +146,9 @@ def test_I(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.0,
-        alpha=1.0,
-        pu=1.0,
-        pg=1.0,
+        sigu=1.1,
+        alpha=1.2,
+        pg=1.3,
+        pu=1.4,
     )
     assert jnp.isclose(si, fi)

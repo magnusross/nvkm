@@ -9,20 +9,18 @@ config.update("jax_enable_x64", True)
 
 
 @jit
-def integ_1a(t, alpha, thet1, beta1, thet2, beta2):
+def integ_1a(t, alpha, thet1, thet2, beta2):
     coeff = 0.5 * jnp.sqrt(jnp.pi / alpha)
-    ea1 = lax.complex(
-        -((thet1 + thet2) ** 2) / (4.0 * alpha), beta1 - beta2 - t * thet2
-    )
+    ea1 = lax.complex(-((thet1 + thet2) ** 2) / (4.0 * alpha), -beta2 - t * thet2)
     ea2 = lax.complex((thet1 * thet2) / alpha, 2 * (beta2 + t * thet2))
     return coeff * jnp.exp(ea1) * (1.0 + jnp.exp(ea2))
 
 
 @jit
-def integ_1b(t, alpha, thet1, beta1, p2, z2):
+def integ_1b(t, alpha, thet1, p2, z2):
     coeff = jnp.sqrt(jnp.pi / (alpha + p2))
     ear = -(thet1 ** 2 + 4 * alpha * p2 * (t - z2) ** 2)
-    eai = 4 * (beta1 * alpha + p2 * (beta1 + t * thet1 - thet1 * z2))
+    eai = 4 * p2 * (t * thet1 - thet1 * z2)
     return coeff * jnp.exp(lax.complex(ear, eai) / (4 * (alpha + p2)))
 
 
@@ -57,48 +55,40 @@ def slow_I1(
         ona = 0.0
         onb = 0.0
         for m in range(Nl):
-            opa += wus[m] * integ_1a(t, alpha, thetag[i], betag, thetus[m], betaus[m])
-            ona += wus[m] * integ_1a(
-                t, alpha, -1.0 * thetag[i], -1.0 * betag, thetus[m], betaus[m]
-            )
+            opa += wus[m] * integ_1a(t, alpha, thetag[i], thetus[m], betaus[m])
+            ona += wus[m] * integ_1a(t, alpha, -1.0 * thetag[i], thetus[m], betaus[m])
         for n in range(Mu):
-            opb += qus[n] * integ_1b(t, alpha, thetag[i], betag, pu, zus[n])
-            onb += qus[n] * integ_1b(
-                t, alpha, -1.0 * thetag[i], -1.0 * betag, pu, zus[n]
-            )
-        o1 *= jnp.sqrt(2.0 / Nl) * opa + sigu ** 2 * opb
-        o2 *= jnp.sqrt(2.0 / Nl) * ona + sigu ** 2 * onb
-
-    return 0.5 * jnp.sqrt(2.0 / Nl) * jnp.real((o1 + o2))
+            opb += qus[n] * integ_1b(t, alpha, thetag[i], pu, zus[n])
+            onb += qus[n] * integ_1b(t, alpha, -1.0 * thetag[i], pu, zus[n])
+        o1 *= opa + sigu ** 2 * opb
+        o2 *= ona + sigu ** 2 * onb
+    out = 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
+    return out
 
 
 @jit
 def fast_I1(
     t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
 ):
-    Nl = wus.shape[0]  # number of basis functions
+    # number of basis functions
 
-    fo = lambda thetag, betag: vmap(
-        lambda thetgij: jnp.sqrt(2.0 / Nl)
-        * map_reduce(
+    fo = lambda thetag: vmap(
+        lambda thetgij: map_reduce(
             lambda wui, thetui, betaui: wui
-            * integ_1a(t, alpha, thetgij, betag, thetui, betaui),
+            * integ_1a(t, alpha, thetgij, thetui, betaui),
             wus,
             thetus,
             betaus,
         )
         + sigu ** 2
         * map_reduce(
-            lambda qui, zui: qui * integ_1b(t, alpha, thetgij, betag, pu, zui),
-            qus,
-            zus,
+            lambda qui, zui: qui * integ_1b(t, alpha, thetgij, pu, zui), qus, zus,
         )
     )(thetag)
 
-    o1 = jnp.prod(fo(thetag, betag))
-    o2 = jnp.prod(fo(-thetag, -betag))
-
-    return 0.5 * jnp.sqrt(2.0 / Nl) * jnp.real(o1 + o2)
+    o1 = jnp.prod(fo(thetag))
+    o2 = jnp.prod(fo(-thetag))
+    return 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
 
 
 def slow_I2(
@@ -120,7 +110,7 @@ def slow_I2(
         for n in range(Mu):
             os2 += qus[n] * integ_2b(t, alpha, pg, zg[i], pu, zus[n])
 
-        o1 *= jnp.sqrt(2 / Nl) * os1
+        o1 *= os1
         o2 *= sigu ** 2 * os2
     return sigg ** 2 * (o1 + o2)
 
@@ -129,11 +119,9 @@ def slow_I2(
 def fast_I2(
     t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
 ):
-    Nl = wus.shape[0]
     o1 = jnp.prod(
         vmap(
-            lambda zgij: jnp.sqrt(2 / Nl)
-            * map_reduce(
+            lambda zgij: map_reduce(
                 lambda wi, thetui, betaui: wi
                 * integ_2a(t, alpha, pg, zgij, thetui, betaui),
                 wus,
@@ -206,7 +194,6 @@ def slow_I(
             pu=pu,
             pg=pg,
         )
-
     return out
 
 
@@ -272,3 +259,4 @@ def fast_I(
     )
 
     return o1 + o2
+
