@@ -98,8 +98,7 @@ def slow_I2(
     Nl = wus.shape[0]  # number of basis functions
     Mu = zus.shape[0]  # number of u inducing points
 
-    o1 = 1.0
-    o2 = 1.0
+    o = 1.0
 
     for i in range(c):
         os1 = 0.0
@@ -110,36 +109,32 @@ def slow_I2(
         for n in range(Mu):
             os2 += qus[n] * integ_2b(t, alpha, pg, zg[i], pu, zus[n])
 
-        o1 *= os1
-        o2 *= sigu ** 2 * os2
-    return sigg ** 2 * (o1 + o2)
+        o *= os1 + sigu ** 2 * os2
+    return sigg ** 2 * o
 
 
 @jit
 def fast_I2(
     t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
 ):
-    o1 = jnp.prod(
-        vmap(
-            lambda zgij: map_reduce(
-                lambda wi, thetui, betaui: wi
-                * integ_2a(t, alpha, pg, zgij, thetui, betaui),
-                wus,
-                thetus,
-                betaus,
-            )
-        )(zg)
-    )
+    o1 = vmap(
+        lambda zgij: map_reduce(
+            lambda wi, thetui, betaui: wi
+            * integ_2a(t, alpha, pg, zgij, thetui, betaui),
+            wus,
+            thetus,
+            betaus,
+        )
+    )(zg)
 
-    o2 = jnp.prod(
-        vmap(
-            lambda zgij: sigu ** 2
-            * map_reduce(
-                lambda qi, zui: qi * integ_2b(t, alpha, pg, zgij, pu, zui), qus, zus,
-            )
-        )(zg)
-    )
-    return sigg ** 2 * (o1 + o2)
+    o2 = vmap(
+        lambda zgij: sigu ** 2
+        * map_reduce(
+            lambda qi, zui: qi * integ_2b(t, alpha, pg, zgij, pu, zui), qus, zus,
+        )
+    )(zg)
+
+    return sigg ** 2 * jnp.prod((o1 + o2))
 
 
 def slow_I(

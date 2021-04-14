@@ -19,17 +19,19 @@ parser.add_argument("--alpha", default=1.0, type=float)
 parser.add_argument("--Nits", default=10, type=int)
 parser.add_argument("--lr", default=1e-2, type=float)
 parser.add_argument("--Nbatch", default=1, type=int)
+parser.add_argument("--Nbasis", default=100, type=int)
 parser.add_argument("--ampsgs_init", default=[1.0, 1.0], nargs="+", type=float)
 parser.add_argument("--Ns", default=2, type=int)
 parser.add_argument("--q_frac", default=0.3, type=float)
 parser.add_argument("--fit_noise", default=1, type=int)
+parser.add_argument("--noise", default=0.3, type=float)
 parser.add_argument("--f_name", default="test", type=str)
 
 args = parser.parse_args()
 
 
 keys = jrnd.split(jrnd.PRNGKey(5), 10)
-noise = 1.0
+noise = args.noise
 # x_tr, y_tr, x_te, y_te = generate_C2_volterra_data(key=keys[0], N_tr=args.Ndata,
 #                                                      N_te=0, noise=noise)
 
@@ -38,22 +40,27 @@ noise = 1.0
 
 Nvu = args.Nvu
 Nvg = args.Nvg
-
+Nvg2 = int(jnp.sqrt(Nvg)) ** 2
 
 t1 = jnp.linspace(-3, 3, Nvg).reshape(-1, 1)
-t2 = 6. * jrnd.uniform(keys[0], shape=(Nvg, 2)) - 3.
+
+tf = jnp.linspace(-3, 3, int(jnp.sqrt(Nvg)))
+tm2 = jnp.meshgrid(tf, tf)
+t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 
 model2 = NVKM(
     zgs=[t1, t2],
-    vgs = [jrnd.normal(keys[3], shape=(Nvg,)), jrnd.normal(keys[2], shape=(Nvg,))],
+    vgs=[jrnd.normal(keys[3], shape=(Nvg,)), jrnd.normal(keys[2], shape=(Nvg2,))],
     zu=jnp.linspace(-15, 15, Nvu).reshape(-1, 1),
     vu=jrnd.normal(keys[1], shape=(Nvu,)),
     C=2,
     lsgs=[1.0, 1.0],
     ampgs=[1.0, 1.0],
-    )
+)
 x = jnp.linspace(-15, 15, args.Ndata)
-y = model2.sample(x, N_s=1, key=keys[6]).flatten() + noise*jrnd.normal(keys[9], shape=(args.Ndata,))
+y = model2.sample(x, N_s=1, key=keys[6]).flatten() + noise * jrnd.normal(
+    keys[9], shape=(args.Ndata,)
+)
 data = (x, y)
 
 var_model2 = VariationalNVKM(
@@ -69,14 +76,19 @@ var_model2 = VariationalNVKM(
     alpha=args.alpha,
     lsu=args.lsu,
     ampu=args.ampu,
+    N_basis=args.Nbasis,
     C=2,
 )
 dont_fit = []
 if not bool(args.fit_noise):
     dont_fit.append("noise")
 
-var_model2.plot_samples(jnp.linspace(-15, 15, 250), 15, save=args.f_name + "c2_samps_pre.png")
-var_model2.plot_filters(jnp.linspace(-3, 3, 100), 10, save=args.f_name + "c2_filter_pre.png")
+var_model2.plot_samples(
+    jnp.linspace(-15, 15, 250), 15, save=args.f_name + "c2_samps_pre.png"
+)
+var_model2.plot_filters(
+    jnp.linspace(-3, 3, 100), 10, save=args.f_name + "c2_filter_pre.png"
+)
 
 var_model2.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
 # var_model2.save(args.f_name + "model.pkl")
