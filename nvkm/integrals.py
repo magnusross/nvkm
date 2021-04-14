@@ -66,21 +66,20 @@ def slow_I1(
             onb += qus[n] * integ_1b(
                 t, alpha, -1.0 * thetag[i], -1.0 * betag, pu, zus[n]
             )
-        o1 *= jnp.sqrt(2.0 / Nl) * opa + sigu ** 2 * opb
-        o2 *= jnp.sqrt(2.0 / Nl) * ona + sigu ** 2 * onb
+        o1 *= opa + sigu ** 2 * opb
+        o2 *= ona + sigu ** 2 * onb
 
-    return 0.5 * jnp.sqrt(2.0 / Nl) * jnp.real((o1 + o2))
+    return 0.5 * jnp.real((o1 + o2))
 
 
 @jit
 def fast_I1(
     t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
 ):
-    Nl = wus.shape[0]  # number of basis functions
+    # number of basis functions
 
     fo = lambda thetag, betag: vmap(
-        lambda thetgij: jnp.sqrt(2.0 / Nl)
-        * map_reduce(
+        lambda thetgij: map_reduce(
             lambda wui, thetui, betaui: wui
             * integ_1a(t, alpha, thetgij, betag, thetui, betaui),
             wus,
@@ -97,8 +96,7 @@ def fast_I1(
 
     o1 = jnp.prod(fo(thetag, betag))
     o2 = jnp.prod(fo(-thetag, -betag))
-
-    return 0.5 * jnp.sqrt(2.0 / Nl) * jnp.real(o1 + o2)
+    return 0.5 * jnp.real(o1 + o2)
 
 
 def slow_I2(
@@ -120,8 +118,9 @@ def slow_I2(
         for n in range(Mu):
             os2 += qus[n] * integ_2b(t, alpha, pg, zg[i], pu, zus[n])
 
-        o1 *= jnp.sqrt(2 / Nl) * os1
+        o1 *= os1
         o2 *= sigu ** 2 * os2
+
     return sigg ** 2 * (o1 + o2)
 
 
@@ -129,11 +128,9 @@ def slow_I2(
 def fast_I2(
     t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
 ):
-    Nl = wus.shape[0]
     o1 = jnp.prod(
         vmap(
-            lambda zgij: jnp.sqrt(2 / Nl)
-            * map_reduce(
+            lambda zgij: map_reduce(
                 lambda wi, thetui, betaui: wi
                 * integ_2a(t, alpha, pg, zgij, thetui, betaui),
                 wus,

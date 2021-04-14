@@ -7,11 +7,12 @@ import jax.experimental.optimizers as opt
 import jax.numpy as jnp
 import jax.random as jrnd
 import jax.scipy as jsp
+from jax.ops import index_add, index
 import matplotlib.pyplot as plt
 from jax import jit, vmap, value_and_grad
 
 
-from .integrals import fast_I
+from .integrals import fast_I, slow_I
 from .settings import JITTER
 from .utils import eq_kernel, l2p, map2matrix, vmap_scan
 from .vi import (
@@ -67,7 +68,7 @@ class EQApproxGP:
 
             self.Kvv, self.LKvv = self.compute_covariances(amp, ls)
 
-    @partial(jit, static_argnums=(0,))
+    # @partial(jit, static_argnums=(0,))
     def compute_covariances(self, amp, ls):
         Kvv = map2matrix(self.kernel, self.z, self.z, amp, ls) + (
             self.noise + JITTER
@@ -79,10 +80,6 @@ class EQApproxGP:
     # def fast_covariance_recompute(self, new_amp):
     #     factor = new_amp ** 2 / self.amp ** 2
     #     return factor * self.Kvv, factor * self.LKvv
-
-    @partial(jit, static_argnums=(0,))
-    def compute_Phi(self, thetas, betas):
-        return vmap(lambda zi: self.phi(zi, thetas, betas))(self.z)
 
     @partial(jit, static_argnums=(0,))
     def kernel(self, t, tp, amp, ls):
@@ -99,11 +96,15 @@ class EQApproxGP:
 
     @partial(jit, static_argnums=(0, 2))
     def sample_ws(self, key, shape, amp):
-        return amp * jrnd.normal(key, shape)
+        return amp * jnp.sqrt(2 / self.N_basis) * jrnd.normal(key, shape)
 
     @partial(jit, static_argnums=(0,))
     def phi(self, t, theta, beta):
-        return jnp.sqrt(2 / self.N_basis) * jnp.cos(jnp.dot(theta, t) + beta)
+        return jnp.cos(jnp.dot(theta, t) + beta)
+
+    @partial(jit, static_argnums=(0,))
+    def compute_Phi(self, thetas, betas):
+        return vmap(lambda zi: self.phi(zi, thetas, betas))(self.z)
 
     @partial(jit, static_argnums=(0,))
     def compute_q(self, v, LKvv, thetas, betas, ws):
@@ -231,15 +232,14 @@ class NVKM:
             )
             betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
             wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
-
             _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
             qgl = vmap(
                 lambda thi, bi, wi: G_gp_i.compute_q(vgs[i], G_LKvv, thi, bi, wi)
             )(thetagl, betagl, wgl)
 
-            samps += vmap(
-                lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: vmap(
-                    lambda ti: fast_I(
+            samps += vmap_scan(
+                lambda ti: vmap(
+                    lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
                         ti,
                         G_gp_i.z,
                         u_gp.z,
@@ -257,31 +257,85 @@ class NVKM:
                         pg=G_gp_i.pr,
                         pu=u_gp.pr,
                     )
-                )(t)
-            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,).T
+                )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
+                t,
+            )
 
         return samps
 
+    # def _slow_sample(self, t, vgs, vu, ampgs, N_s=10, key=jrnd.PRNGKey(1)):
+
+    #     samps = jnp.zeros((len(t), N_s))
+    #     skey = jrnd.split(key, 4)
+
+    #     u_gp = self.u_gp
+    #     thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
+    #     betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
+    #     wul = 1.0 * u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), u_gp.amp)
+
+    #     qul = 1.0 * vmap(
+    #         lambda thi, bi, wi: u_gp.compute_q(vu, u_gp.LKvv, thi, bi, wi)
+    #     )(thetaul, betaul, 1.0 * wul)
+
+    #     for i in range(1, 2):  # 1):
+
+    #         skey = jrnd.split(skey[3], 4)
+
+    #         G_gp_i = self.g_gps[i]
+    #         thetagl = G_gp_i.sample_thetas(
+    #             skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
+    #         )
+    #         betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
+    #         wgl = 1.0 * G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
+    #         _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
+
+    #         qgl = vmap(
+    #             lambda thi, bi, wi: G_gp_i.compute_q(vgs[i], G_LKvv, thi, bi, wi)
+    #         )(thetagl, betagl, 1.0 * wgl)
+    #         # wgl *= 0.0
+
+    #         for k in range(len(t)):
+    #             for j in range(N_s):
+    #                 print(j)
+    #                 a = slow_I(
+    #                     t[k],
+    #                     G_gp_i.z,
+    #                     u_gp.z,
+    #                     thetagl[j],
+    #                     betagl[j],
+    #                     thetaul[j],
+    #                     betaul[j],
+    #                     wgl[j],
+    #                     qgl[j],
+    #                     wul[j],
+    #                     qul[j],
+    #                     ampgs[i],
+    #                     sigu=u_gp.amp,
+    #                     alpha=self.alpha,
+    #                     pg=G_gp_i.pr,
+    #                     pu=u_gp.pr,
+    #                 )
+    #                 print(a)
+    #                 samps = index_add(samps, index[k, j], a[0])
+
+    #         return samps
+
     def sample(self, t, N_s=10, key=jrnd.PRNGKey(1)):
         return self._sample(t, self.vgs, self.vu, self.ampgs, N_s=N_s, key=key)
-        
-    def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+
+    def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, 2)
 
         fig, axs = plt.subplots(2, 1, figsize=(10, 7))
         samps = self.sample(t, N_s, key=skey[0])
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].legend()
-        
+
         u_samps = self.u_gp.sample(t, N_s, key=skey[1])
 
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
         axs[1].scatter(
-            self.u_gp.z,
-            self.u_gp.v,
-            label="Inducing Points",
-            marker="x",
-            c="green",
+            self.u_gp.z, self.u_gp.v, label="Inducing Points", marker="x", c="green",
         )
         axs[1].legend()
         if save:
@@ -367,7 +421,7 @@ class VariationalNVKM(NVKM):
     def sample_diag_g_gps(self, ts, N_s, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, N_s + 1)
         v_gs = self.q_of_v._sample(self.q_pars, N_s, skey[0])["gs"]
-#         print(v_gs[1][1])
+        #         print(v_gs[1][1])
         return [
             vmap(lambda vi, keyi: gp._sample(ts[i], vi, gp.amp, 1, keyi).flatten())(
                 v_gs[i], skey[1:]
@@ -494,7 +548,7 @@ class VariationalNVKM(NVKM):
             for k in dpars.keys():
                 if k not in dont_fit:
                     dpars[k] = get_params(opt_state)[k]
-#             print(dpars["q_pars"]["mu_u"])
+            #             print(dpars["q_pars"]["mu_u"])
             # this ensurse array are lower triangular
             # should prob go elsewhere
             for j in range(self.C):
@@ -525,8 +579,8 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
-        
-#         print(self.q_pars["mu_u"])s
+
+        #         print(self.q_pars["mu_u"])s
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
         # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
