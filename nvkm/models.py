@@ -10,11 +10,11 @@ import jax.scipy as jsp
 from jax.ops import index_add, index
 import matplotlib.pyplot as plt
 from jax import jit, vmap, value_and_grad
+from jax.experimental.host_callback import id_print
 
-
-from .integrals import fast_I, slow_I
+from .integrals import fast_I
 from .settings import JITTER
-from .utils import eq_kernel, l2p, map2matrix, vmap_scan
+from .utils import eq_kernel, l2p, map2matrix, vmap_scan, choleskyize
 from .vi import (
     IndependentGaussians,
     VariationalDistribution,
@@ -467,7 +467,8 @@ class VariationalNVKM(NVKM):
             betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
             wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
 
-            # print(G_gp_i.LKvv, G_Lkvv)
+            # id_print(jnp.any(jnp.isnan(G_gp_i.LKvv)))
+            # id_print(jnp.any(jnp.isnan(G_gp_i.LKvv)))
             _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
             qgl = vmap(
                 lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
@@ -510,7 +511,10 @@ class VariationalNVKM(NVKM):
 
         x, y = data
         samples = self._sample(x, q_pars, ampgs, N_s, key=key)
+        # id_print(jnp.any(jnp.isnan(samples)))
         like = self.likelihood(y, samples, noise)
+        id_print(KL)
+        id_print(like)
         return -(KL + like)
 
     def compute_bound(self, N_s, key=jrnd.PRNGKey(1)):
@@ -552,12 +556,12 @@ class VariationalNVKM(NVKM):
             # this ensurse array are lower triangular
             # should prob go elsewhere
             for j in range(self.C):
-                dpars["q_pars"]["LC_gs"][j] = jnp.tril(dpars["q_pars"]["LC_gs"][j])
-            dpars["q_pars"]["LC_u"] = jnp.tril(dpars["q_pars"]["LC_u"])
+                dpars["q_pars"]["LC_gs"][j] = choleskyize(dpars["q_pars"]["LC_gs"][j])
+            dpars["q_pars"]["LC_u"] = choleskyize(dpars["q_pars"]["LC_u"])
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
-                return get_params(opt_state)
+                return dpars
 
             elif i % 2 == 0:
                 print(f"it: {i} F: {value} ")
@@ -579,9 +583,15 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
+        axs[0].text(
+            t.min(),
+            samps.max(),
+            f"L: {self.likelihood(self.data[1], self.sample(self.data[0], N_s), self.noise)}",
+        )
 
         #         print(self.q_pars["mu_u"])s
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
+
         # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
         axs[1].scatter(
