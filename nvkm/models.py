@@ -507,6 +507,10 @@ class VariationalNVKM(NVKM):
     def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key=jrnd.PRNGKey(1)):
         p_pars = self._compute_p_pars(ampgs, self.lsgs, self.ampu, self.lsu)
 
+        for j in range(self.C):
+            q_pars["LC_gs"][j] = choleskyize(q_pars["LC_gs"][j])
+        q_pars["LC_u"] = choleskyize(q_pars["LC_u"])
+
         KL = self.q_of_v._KL(p_pars, q_pars)
 
         x, y = data
@@ -555,9 +559,6 @@ class VariationalNVKM(NVKM):
             #             print(dpars["q_pars"]["mu_u"])
             # this ensurse array are lower triangular
             # should prob go elsewhere
-            for j in range(self.C):
-                dpars["q_pars"]["LC_gs"][j] = choleskyize(dpars["q_pars"]["LC_gs"][j])
-            dpars["q_pars"]["LC_u"] = choleskyize(dpars["q_pars"]["LC_u"])
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
@@ -568,6 +569,10 @@ class VariationalNVKM(NVKM):
 
         # when optimisation complete, set attributes to be new ones
         # and update computations
+        for j in range(self.C):
+            dpars["q_pars"]["LC_gs"][j] = choleskyize(dpars["q_pars"]["LC_gs"][j])
+        dpars["q_pars"]["LC_u"] = choleskyize(dpars["q_pars"]["LC_u"])
+
         for k in dpars.keys():
             setattr(self, k, dpars[k])
 
