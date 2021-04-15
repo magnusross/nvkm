@@ -24,13 +24,13 @@ parser.add_argument("--Ns", default=2, type=int)
 parser.add_argument("--q_frac", default=0.3, type=float)
 parser.add_argument("--fit_noise", default=1, type=int)
 parser.add_argument("--f_name", default="test", type=str)
-
+parser.add_argument("--noise", default=0.1, type=float)
 args = parser.parse_args()
 
 
 keys = jrnd.split(jrnd.PRNGKey(5), 10)
-noise = 0.01
 
+noise = args.noise
 Nvu = args.Nvu
 Nvg = args.Nvg
 
