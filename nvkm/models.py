@@ -553,6 +553,7 @@ class VariationalNVKM(NVKM):
             )(dpars)
             opt_state = opt_update(i, grads, opt_state)
 
+            print(jnp.max(dpars["q_pars"]["LC_gs"][1]))
             for k in dpars.keys():
                 if k not in dont_fit:
                     dpars[k] = get_params(opt_state)[k]
@@ -588,11 +589,11 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
-        axs[0].text(
-            t.min(),
-            samps.max(),
-            f"L: {self.likelihood(self.data[1], self.sample(self.data[0], N_s), self.noise)}",
-        )
+        # axs[0].text(
+        #     t.min(),
+        #     samps.max(),
+        #     f"L: {self.likelihood(self.data[1], self.sample(self.data[0], N_s), self.noise)}",
+        # )
 
         #         print(self.q_pars["mu_u"])s
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])

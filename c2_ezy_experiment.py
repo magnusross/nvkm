@@ -34,15 +34,18 @@ noise = args.noise
 Nvu = args.Nvu
 Nvg = args.Nvg
 
+
+tf = jnp.linspace(-3, 3, int(jnp.sqrt(Nvg)))
+tm2 = jnp.meshgrid(tf, tf)
+t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 tf = jnp.linspace(-3, 3, 100)
 t1 = jnp.linspace(-3, 3, Nvg).reshape(-1, 1)
-t2 = 6.0 * jrnd.uniform(keys[0], shape=(Nvg, 2)) - 3.0
 
 model2 = NVKM(
     zgs=[t1, t2],
     vgs=[None, None],
-    zu=jnp.linspace(-15, 15, Nvu).reshape(-1, 1),
-    vu=jrnd.normal(keys[1], shape=(Nvu,)),
+    zu=jnp.linspace(-7, 7, Nvu).reshape(-1, 1),
+    vu=None,
     C=2,
     lsgs=args.lsgs,
     ampgs=args.ampsgs_init,
@@ -58,7 +61,7 @@ model2.u_gp = model2.set_u_gp(args.ampu, args.lsu)
 # plot_c2_filter_multi(model2, tf, 15, save=args.f_name + 'non_var_c2f.png', variational=False)
 # plt.show()
 
-x = jnp.linspace(-15, 15, args.Ndata)
+x = jnp.linspace(-5, 5, args.Ndata)
 y = model2.sample(x, N_s=1, key=keys[6]).flatten() + noise * jrnd.normal(
     keys[9], shape=(args.Ndata,)
 )
@@ -76,7 +79,7 @@ q_pars_init = {
 
 var_model2 = VariationalNVKM(
     [t1, t2],
-    jnp.linspace(-15, 15, Nvu).reshape(-1, 1),
+    jnp.linspace(-7, 7, Nvu).reshape(-1, 1),
     data,
     IndependentGaussians,
     q_pars_init=q_pars_init,
@@ -93,12 +96,28 @@ if not bool(args.fit_noise):
     dont_fit.append("noise")
 
 # plot_c2_filter_multi(var_model2, tf, 10, save=args.f_name + 'var_c2f.png', variational=True)
-var_model2.plot_samples(
-    jnp.linspace(-15, 15, 100), 5, save=args.f_name + "pre_samps.png"
-)
-var_model2.plot_filters(tf, 5, save=args.f_name + "pre_filter_pre.png")
+var_model2.plot_samples(jnp.linspace(-7, 7, 50), 5)
+var_model2.plot_filters(tf, 5)
+#%%
+# import matplotlib.pyplot as plt
 
-
+# Nim = 50
+# Nax = 5
+# xa = jnp.linspace(-3, 3, Nim)
+# tm2 = jnp.meshgrid(xa, xa)
+# tv2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
+# y = (
+#     jnp.exp(-var_model2.alpha * jnp.sum((tv2) ** 2, axis=1))
+#     * var_model2.g_gps[1].sample(tv2, Nax ** 2).T
+# ).T
+# fig, axs = plt.subplots(Nax, Nax, figsize=(10, 10))
+# for i in range(Nax):
+#     for j in range(Nax):
+#         axs[i, j].imshow(y[:, i * j].reshape(Nim, Nim), extent=[-3, 3, -3, 3])
+#         axs[i, j].scatter(var_model2.zgs[1][:, 0], var_model2.zgs[1][:, 1])
+# plt.show()
+# plot_c2_filter_multi(var_model2, tf, 5, variational=True)
+# quit()
 failed_pars = var_model2.fit(
     args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit
 )
@@ -122,6 +141,6 @@ if failed_pars:
     print(failed_pars)
 else:
     var_model2.plot_samples(
-        jnp.linspace(-15, 15, 150), 5, save=args.f_name + "fit_samps.png"
+        jnp.linspace(-5, 5, 50), 5, save=args.f_name + "fit_samps.png"
     )
-    var_model2.plot_filters(tf, 10, save=args.f_name + "fit_filter.png")
+    var_model2.plot_filters(tf, 5, save=args.f_name + "fit_filter.png")
