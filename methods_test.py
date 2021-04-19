@@ -1,5 +1,6 @@
 #%%
 import jax.numpy as jnp
+import jax.random as jrnd
 from jax import grad, jit
 import matplotlib.pyplot as plt
 from functools import partial
@@ -83,4 +84,28 @@ def f(model, x):
 # %%
 test = Tester4()
 %timeit test.opt_f()
+# %%
+
+class Tester5:
+    def __init__(self):
+        self.x = 10.
+
+class Tester6:
+    def __init__(self):
+        pass
+
+    @partial(jit, static_argnums=(0,))
+    def do_x(self, t: Tester5):
+        return t.x **2
+        
+t5 = Tester5()
+t6 = Tester6()
+t6.do_x(t5)       
+# %%
+@jit
+def s(x, key):
+    return x * jrnd.uniform(key)
+
+# %%
+s(1, jrnd.PRNGKey(1))
 # %%

@@ -69,15 +69,16 @@ class IndependentGaussians(BaseGaussain):
         super().__init__()
 
     def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
-        skey = jrnd.split(key, 2)
+        skey = jrnd.split(key, model.C + 1)
         q_pars = {}
         q_pars["LC_gs"] = [arr * frac for arr in model.p_pars["LK_gs"]]
         q_pars["LC_u"] = frac * model.p_pars["LK_u"]
         q_pars["mu_gs"] = [
-            gp.sample(gp.z, 1, key=skey[0]).flatten() for gp in model.g_gps
+            gp.sample(gp.z, 1, key=skey[i]).flatten()
+            for i, gp in enumerate(model.g_gps)
         ]
         q_pars["mu_u"] = model.u_gp._sample(
-            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=skey[1]
+            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=skey[-1]
         ).flatten()
         return q_pars
 
@@ -106,6 +107,63 @@ class IndependentGaussians(BaseGaussain):
         samps_dict["u"] = self.single_sample(
             q_pars["LC_u"], q_pars["mu_u"], N_s, keys[-1]
         )
+        return samps_dict
+
+
+class MOIndependentGaussians(BaseGaussain):
+    def __init__(self):
+        pass
+
+    def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
+
+        q_pars = {}
+        q_pars["LC_gs"] = [
+            [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
+        ]
+        q_pars["LC_u"] = frac * model.p_pars["LK_u"]
+        q_pars["mu_gs"] = []
+        for i in range(model.O):
+            il = []
+            for gp in model.g_gps[i]:
+                skey, key = jrnd.split(key)
+                il.append(gp.sample(gp.z, 1, key=skey).flatten())
+            q_pars["mu_gs"].append(il)
+
+        q_pars["mu_u"] = model.u_gp._sample(
+            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=key
+        ).flatten()
+        return q_pars
+
+    @partial(jit, static_argnums=(0,))
+    def KL(self, p_pars, q_pars):
+        val = 0.0
+
+        for i in range(len(q_pars["LC_gs"])):  # each ouput
+            for j in range(len(q_pars["LC_gs"][i])):  # each term
+                val += self.single_KL(
+                    q_pars["LC_gs"][i][j], q_pars["mu_gs"][i][j], p_pars["LK_gs"][i][j]
+                )
+
+        val += self.single_KL(q_pars["LC_u"], q_pars["mu_u"], p_pars["LK_u"])
+        return val
+
+    @partial(jit, static_argnums=(0, 2))
+    def sample(self, q_pars, N_s, key):
+
+        skey, key = jrnd.split(key)
+        samps_dict = {"u": None, "gs": []}
+        for i in range(len(q_pars["LC_gs"])):
+            li = []  # each ouput
+            for j in range(len(q_pars["LC_gs"][i])):  # each term
+                li.append(
+                    self.single_sample(
+                        q_pars["LC_gs"][i][j], q_pars["mu_gs"][i][j], N_s, skey
+                    )
+                )
+                skey, key = jrnd.split(key)
+            samps_dict["gs"].append(li)
+
+        samps_dict["u"] = self.single_sample(q_pars["LC_u"], q_pars["mu_u"], N_s, skey)
         return samps_dict
 
 
