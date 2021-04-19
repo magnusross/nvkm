@@ -15,7 +15,7 @@ config.update("jax_enable_x64", True)
 
 VIPars = Dict[str, Union[jnp.DeviceArray, List[jnp.DeviceArray]]]
 
-
+"""
 class VariationalDistribution:
     def __init__(self, init_pars: Union[VIPars, None]):
         self.q_pars = init_pars
@@ -30,13 +30,35 @@ class VariationalDistribution:
         pass
 
     def KL(self, p_pars):
-        return self._KL(p_pars, self.q_pars)
+        return selfKL(p_pars, self.q_pars)
 
     def sample(self, key, N_s=10):
         return self._sample(self.q_pars, N_s, key)
+"""
 
 
-class IndependentGaussians:
+class BaseGaussain:
+    def __init__(self):
+        pass
+
+    @partial(jit, static_argnums=(0,))
+    def single_KL(self, LC, m, LK):
+        C = LC @ LC.T
+        mt = -0.5 * (
+            jnp.dot(m.T, jsp.linalg.cho_solve((LK, True), m))
+            + jnp.trace(jsp.linalg.cho_solve((LK, True), C))
+        )
+
+        st = 0.5 * (jnp.sum(jnp.log(jnp.diag(LC))) - jnp.sum(jnp.log(jnp.diag(LK))))
+        # id_print(jnp.diag(LC).min())
+        return mt + st + 0.5 * LC.shape[0]
+
+    @partial(jit, static_argnums=(0, 3))
+    def single_sample(self, LC, m, N_s, key):
+        return jrnd.multivariate_normal(key, m, LC @ LC.T, (N_s,))
+
+
+class IndependentGaussians(BaseGaussain):
     def __init__(self):
         """[summary]
 
@@ -44,7 +66,7 @@ class IndependentGaussians:
             init_pars (Dict[str, jnp.DeviceArray]):
             should have fields "LCu", "mu",
         """
-        # super().__init__(init_pars)
+        super().__init__()
 
     def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
         skey = jrnd.split(key, 2)
@@ -60,50 +82,30 @@ class IndependentGaussians:
         return q_pars
 
     @partial(jit, static_argnums=(0,))
-    def single_KL(self, LC, m, LK):
-        C = LC @ LC.T
-        mt = -0.5 * (
-            jnp.dot(m.T, jsp.linalg.cho_solve((LK, True), m))
-            + jnp.trace(jsp.linalg.cho_solve((LK, True), C))
-        )
-
-        st = 0.5 * (jnp.sum(jnp.log(jnp.diag(LC))) - jnp.sum(jnp.log(jnp.diag(LK))))
-        # id_print(jnp.diag(LC).min())
-        return mt + st + 0.5 * LC.shape[0]
-
-    @partial(jit, static_argnums=(0,))
-    def _KL(self, p_pars, q_pars):
+    def KL(self, p_pars, q_pars):
         val = 0.0
         for i in range(len(q_pars["LC_gs"])):
 
             val += self.single_KL(
                 q_pars["LC_gs"][i], q_pars["mu_gs"][i], p_pars["LK_gs"][i]
             )
-            # id_print(val)
 
         val += self.single_KL(q_pars["LC_u"], q_pars["mu_u"], p_pars["LK_u"])
 
         return val
 
     @partial(jit, static_argnums=(0, 2))
-    def _sample(self, q_pars, N_s, key):
+    def sample(self, q_pars, N_s, key):
         D = len(q_pars["LC_gs"])
         keys = jrnd.split(key, D + 1)
         samps_dict = {"u": None, "gs": []}
-
         for i in range(D):
-            LC_g = q_pars["LC_gs"][i]
-
             samps_dict["gs"].append(
-                jrnd.multivariate_normal(
-                    keys[i], q_pars["mu_gs"][i], LC_g @ LC_g.T, (N_s,)
-                )
+                self.single_sample(q_pars["LC_gs"][i], q_pars["mu_gs"][i], N_s, keys[i])
             )
-
-        samps_dict["u"] = jrnd.multivariate_normal(
-            keys[-1], q_pars["mu_u"], q_pars["LC_u"] @ q_pars["LC_u"].T, (N_s,)
+        samps_dict["u"] = self.single_sample(
+            q_pars["LC_u"], q_pars["mu_u"], N_s, keys[-1]
         )
-
         return samps_dict
 
 

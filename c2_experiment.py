@@ -51,7 +51,7 @@ t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 model2 = NVKM(
     zgs=[t1, t2],
     vgs=[jrnd.normal(keys[3], shape=(Nvg,)), jrnd.normal(keys[2], shape=(Nvg2,))],
-    zu=jnp.linspace(-15, 15, Nvu).reshape(-1, 1),
+    zu=jnp.linspace(-17, 17, Nvu).reshape(-1, 1),
     vu=jrnd.normal(keys[1], shape=(Nvu,)),
     C=2,
     lsgs=[1.0, 1.0],
@@ -65,14 +65,14 @@ data = (x, y)
 
 var_model2 = VariationalNVKM(
     [t1, t2],
-    jnp.linspace(-15, 15, Nvu).reshape(-1, 1),
+    jnp.linspace(-17, 17, Nvu).reshape(-1, 1),
     data,
     IndependentGaussians,
     q_pars_init=None,
     q_initializer_pars=args.q_frac,
     lsgs=args.lsgs,
-    ampgs_init=args.ampsgs_init,
-    noise_init=noise,
+    ampgs=args.ampsgs_init,
+    noise=noise,
     alpha=args.alpha,
     lsu=args.lsu,
     ampu=args.ampu,
@@ -84,7 +84,7 @@ if not bool(args.fit_noise):
     dont_fit.append("noise")
 
 var_model2.plot_samples(
-    jnp.linspace(-15, 15, 250), 15, save=args.f_name + "c2_samps_pre.png"
+    jnp.linspace(-17, 17, 150), 15, save=args.f_name + "c2_samps_pre.png"
 )
 var_model2.plot_filters(
     jnp.linspace(-3, 3, 100), 10, save=args.f_name + "c2_filter_pre.png"
@@ -93,7 +93,7 @@ var_model2.plot_filters(
 var_model2.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit)
 # var_model2.save(args.f_name + "model.pkl")
 var_model2.plot_samples(
-    jnp.linspace(-15, 15, 250), 15, save=args.f_name + "fit_samps.png"
+    jnp.linspace(-17, 17, 150), 15, save=args.f_name + "fit_samps.png"
 )
 var_model2.plot_filters(
     jnp.linspace(-3, 3, 100), 10, save=args.f_name + "fit_filter.png"

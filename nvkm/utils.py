@@ -179,7 +179,7 @@ def plot_c2_filter_multi(
         skey = jrnd.split(key, N_s + 1)
         gp = model.g_gps[1]
 
-        v_samps = model.q_of_v._sample(model.q_pars, N_s, skey[0])["gs"][1]
+        v_samps = model.q_of_v.sample(model.q_pars, N_s, skey[0])["gs"][1]
 
         sampsp = vmap(lambda vi, keyi: gp._sample(tp, vi, gp.amp, 1, keyi).flatten())(
             v_samps, skey[1:]

@@ -51,13 +51,13 @@ model2 = NVKM(
     ampgs=args.ampsgs_init,
     alpha=args.alpha,
 )
-model2.vgs = [
-    model2.g_gps[0].sample(model2.zgs[0], 1).flatten(),
-    model2.g_gps[1].sample(model2.zgs[1], 1, key=jrnd.PRNGKey(1010101)).flatten(),
-]
-model2.vu = model2.u_gp.sample(model2.zu, 1).flatten()
-model2.g_gps = model2.set_G_gps(args.ampsgs_init, args.lsgs)
-model2.u_gp = model2.set_u_gp(args.ampu, args.lsu)
+# model2.vgs = [
+#     model2.g_gps[0].sample(model2.zgs[0], 1).flatten(),
+#     model2.g_gps[1].sample(model2.zgs[1], 1, key=jrnd.PRNGKey(1010101)).flatten(),
+# ]
+# model2.vu = model2.u_gp.sample(model2.zu, 1).flatten()
+# model2.g_gps = model2.set_G_gps(args.ampsgs_init, args.lsgs)
+# model2.u_gp = model2.set_u_gp(args.ampu, args.lsu)
 # plot_c2_filter_multi(model2, tf, 15, save=args.f_name + 'non_var_c2f.png', variational=False)
 # plt.show()
 
@@ -66,7 +66,6 @@ y = model2.sample(x, N_s=1, key=keys[6]).flatten() + noise * jrnd.normal(
     keys[9], shape=(args.Ndata,)
 )
 data = (x, y)
-
 # model2.plot_samples(x, 5, save=args.f_name + 'non_var_samps.png')
 
 q_pars_init = {
@@ -84,8 +83,8 @@ var_model2 = VariationalNVKM(
     IndependentGaussians,
     q_pars_init=q_pars_init,
     lsgs=args.lsgs,
-    ampgs_init=args.ampsgs_init,
-    noise_init=noise,
+    ampgs=args.ampsgs_init,
+    noise=noise,
     alpha=args.alpha,
     lsu=args.lsu,
     ampu=args.ampu,
@@ -96,7 +95,7 @@ if not bool(args.fit_noise):
     dont_fit.append("noise")
 
 # plot_c2_filter_multi(var_model2, tf, 10, save=args.f_name + 'var_c2f.png', variational=True)
-var_model2.plot_samples(jnp.linspace(-7, 7, 50), 5)
+# var_model2.plot_samples(jnp.linspace(-7, 7, 50), 5)
 var_model2.plot_filters(tf, 5)
 #%%
 # import matplotlib.pyplot as plt
@@ -117,7 +116,7 @@ var_model2.plot_filters(tf, 5)
 #         axs[i, j].scatter(var_model2.zgs[1][:, 0], var_model2.zgs[1][:, 1])
 # plt.show()
 # plot_c2_filter_multi(var_model2, tf, 5, variational=True)
-# quit()
+quit()
 failed_pars = var_model2.fit(
     args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=dont_fit
 )
