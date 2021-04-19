@@ -164,6 +164,10 @@ def method(cls):
     return decorator
 
 
+def choleskyize(A):
+    return jnp.tril(A - 2 * jnp.diag(jnp.diag(A) * (jnp.diag(A) < 0.0)))
+
+
 def plot_c2_filter_multi(
     model, t, N_s, key=jrnd.PRNGKey(1), save=None, variational=False
 ):

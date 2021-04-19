@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 import jax.random as jrnd
 from jax import jit
+from jax.experimental.host_callback import id_print
 
 
 from typing import Dict, Union, List
@@ -65,17 +66,23 @@ class IndependentGaussians:
             jnp.dot(m.T, jsp.linalg.cho_solve((LK, True), m))
             + jnp.trace(jsp.linalg.cho_solve((LK, True), C))
         )
-        st = jnp.sum(jnp.log(jnp.diag(LC) / jnp.diag(LK))) + 0.5 * LC.shape[0]
-        return mt + st
+
+        st = 0.5 * (jnp.sum(jnp.log(jnp.diag(LC))) - jnp.sum(jnp.log(jnp.diag(LK))))
+        # id_print(jnp.diag(LC).min())
+        return mt + st + 0.5 * LC.shape[0]
 
     @partial(jit, static_argnums=(0,))
     def _KL(self, p_pars, q_pars):
         val = 0.0
         for i in range(len(q_pars["LC_gs"])):
+
             val += self.single_KL(
                 q_pars["LC_gs"][i], q_pars["mu_gs"][i], p_pars["LK_gs"][i]
             )
+            # id_print(val)
+
         val += self.single_KL(q_pars["LC_u"], q_pars["mu_u"], p_pars["LK_u"])
+
         return val
 
     @partial(jit, static_argnums=(0, 2))
