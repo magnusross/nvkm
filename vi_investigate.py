@@ -64,7 +64,7 @@ var_model = VariationalNVKM(
 s = jrnd.normal(jrnd.PRNGKey(1), shape=(100,))
 dist = vi.IndependentGaussians()
 # dist.single_KL(jnp.eye(100), s, 0.9 * jnp.eye(100))
-dist._KL(var_model.p_pars, var_model.q_pars)
+distKL(var_model.p_pars, var_model.q_pars)
 dist.single_KL(
     var_model.q_pars["LC_gs"][0],
     model.vgs[0],  # model.sample(t1, 1, key=jrnd.PRNGKey(100101)).flatten(),

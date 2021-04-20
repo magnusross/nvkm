@@ -93,8 +93,8 @@ def set_var_nvkm():
         vi.IndependentGaussians,
         q_pars_init=q_pars_init3,
         lsgs=[1.0, 2.0, 1.0],
-        ampgs_init=[1.0, 1.0, 1.0],
-        noise_init=0.01,
+        ampgs=[1.0, 1.0, 1.0],
+        noise=0.01,
         C=3,
     )
 
