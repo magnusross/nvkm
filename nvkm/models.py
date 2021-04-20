@@ -540,16 +540,8 @@ class VariationalNVKM(NVKM):
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
         axs[0].legend()
-        # axs[0].text(
-        #     t.min(),
-        #     samps.max(),
-        #     f"L: {self.likelihood(self.data[1], self.sample(self.data[0], N_s), self.noise)}",
-        # )
-
-        #         print(self.q_pars["mu_u"])s
         u_samps = self.sample_u_gp(t, N_s, key=skey[1])
 
-        # print(u_samps[0])
         axs[1].plot(t, u_samps, c="blue", alpha=0.5)
         axs[1].scatter(
             self.u_gp.z,
@@ -771,7 +763,7 @@ class MultiOutputNVKM:
         p_pars = self._compute_p_pars(ampgs, self.lsgs, self.ampu, self.lsu)
 
         for i in range(self.O):
-            for j in range(self.C):
+            for j in range(self.C[i]):
                 q_pars["LC_gs"][i][j] = choleskyize(q_pars["LC_gs"][i][j])
         q_pars["LC_u"] = choleskyize(q_pars["LC_u"])
 
@@ -797,18 +789,18 @@ class MultiOutputNVKM:
 
         for i in range(its):
             skey, key = jrnd.split(key, 2)
-            y_bs = [] * self.O
-            x_bs = [] * self.O
+            y_bs = []
+            x_bs = []
             for j in range(self.O):
                 skey, key = jrnd.split(key, 2)
 
                 if batch_size:
-                    rnd_idx = jrnd.choice(key, len(ys[i]), shape=(batch_size,))
-                    y_bs[j] = ys[j][rnd_idx]
-                    x_bs[j] = xs[j][rnd_idx]
+                    rnd_idx = jrnd.choice(key, len(ys[j]), shape=(batch_size,))
+                    y_bs.append(ys[j][rnd_idx])
+                    x_bs.append(xs[j][rnd_idx])
                 else:
-                    y_bs[j] = ys[j]
-                    x_bs[j] = xs[j]
+                    y_bs.append(ys[j])
+                    x_bs.append(xs[j])
 
             value, grads = value_and_grad(
                 lambda dp: self._compute_bound(
@@ -834,4 +826,47 @@ class MultiOutputNVKM:
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
         self.u_gp = self.set_u_gp(self.ampu, self.lsu)
+
+    def plot_samples(self, tu, tys, N_s, save=False, key=jrnd.PRNGKey(304)):
+
+        fig, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
+
+        u_samps = self.sample_u_gp(tu, N_s, key=key)
+        axs[0].set_ylabel(f"$u$")
+        axs[0].set_xlabel("$t$")
+        axs[0].scatter(self.zu, self.q_pars["mu_u"], c="blue", alpha=0.5)
+        axs[0].plot(tu, u_samps, c="blue", alpha=0.5)
+
+        samps = self.sample(tys, N_s, key=key)
+        for i in range(0, self.O):
+            axs[i + 1].set_ylabel(f"$y_{i+1}$")
+            axs[i + 1].set_xlabel("$t$")
+            axs[i + 1].plot(tys[i], samps[i], c="green", alpha=0.5)
+            axs[i + 1].scatter(self.data[0][i], self.data[1][i])
+
+        if save:
+            plt.savefig(save)
+        plt.show()
+
+    def plot_filters(self, tf, N_s, save=False, key=jrnd.PRNGKey(211)):
+        tfs = [
+            [jnp.vstack((tf for j in range(gp.D))).T for gp in self.g_gps[i]]
+            for i in range(self.O)
+        ]
+        g_samps = self.sample_diag_g_gps(tfs, 10)
+
+        fig, axs = plt.subplots(
+            max(self.C), self.O, figsize=(4 * self.O, 2 * max(self.C)),
+        )
+        for i in range(self.O):
+            for j in range(self.C[i]):
+                y = g_samps[i][j].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+                axs[j][i].plot(tf, y.T, c="red", alpha=0.5)
+                axs[j][i].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
+            for k in range(self.C[i], max(self.C)):
+                axs[k][i].axis("off")
+        plt.tight_layout()
+        if save:
+            plt.savefig(save)
+        plt.show()
 

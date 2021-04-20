@@ -274,3 +274,37 @@ def generate_EQ_data(N=880, key=jax.random.PRNGKey(34)):
         t,
         y,
     )
+
+
+# def load_ncmogp_data(
+#     N=50, rng=rng, path="/Users/magnus/Documents/phd/code/repos/volterra_gps/data/"
+# ):
+#     all_x = onp.load(path + "toy_x.npy")
+#     all_y = onp.load(path + "toy_y.npy")
+
+#     # shuf = shuffle(rng, np.arange(len(all_x)))
+#     # shuf_x = all_x[shuf].T
+#     # shuf_y = all_y[shuf].T
+
+#     shuf_tr_x = onp.empty((3, N))
+#     shuf_tr_y = onp.empty((3, N))
+#     shuf_te_x = onp.empty((3, len(all_x) - N))
+#     shuf_te_y = onp.empty((3, len(all_x) - N))
+
+#     for i in range(3):
+#         sort_all = np.argsort(all_x[:, i])
+#         all_x[:, i] = all_x[sort_all, i]
+#         all_y[:, i] = all_y[sort_all, i]
+#         mix = shuffle(rng, np.arange(len(all_x)))
+#         mixtr = onp.sort(mix[:N])
+#         mixte = onp.sort(mix[N:])
+
+#         shuf_tr_x[i] = all_x.T[i, mixtr]
+#         shuf_tr_y[i] = all_y.T[i, mixtr]
+#         shuf_te_x[i] = all_x.T[i, mixte]
+#         shuf_te_y[i] = all_y.T[i, mixte]
+
+#     train = {"X": np.array(shuf_tr_x), "Y": np.array(shuf_tr_y)}
+#     test = {"X": np.array(shuf_te_x), "Y": np.array(shuf_te_y)}
+
+#     return train, test
