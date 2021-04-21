@@ -1,5 +1,5 @@
 #%%
-from nvkm.models import NVKM, VariationalNVKM
+from nvkm.models import NVKM, NewVarNVKM
 from nvkm.vi import IndependentGaussians
 import jax.numpy as jnp
 import jax.random as jrnd
@@ -58,19 +58,18 @@ q_pars_init3 = {
     "LC_u": jnp.eye(2),
     "mu_u": jrnd.normal(keys[1], shape=(2,)),
 }
-var_model3 = VariationalNVKM(
+var_model3 = NewVarNVKM(
     [t1, t2, t3],
     jnp.linspace(-5, 5, 2).reshape(-1, 1),
     data,
-    IndependentGaussians,
     q_pars_init=q_pars_init3,
     lsgs=[1.0, 2.0, 1.0],
-    ampgs_init=[1.0, 1.0, 1.0],
-    noise_init=0.01,
-    C=3,
+    ampgs=[1.0, 1.0, 1.0],
+    noise=0.01,
 )
 
-
+print(var_model3.__dict__)
+var_model3.sample_diag_g_gps
 # %timeit model.sample(t, N_s=1)
 #%%
 # %timeit

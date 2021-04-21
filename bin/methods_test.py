@@ -109,3 +109,23 @@ def s(x, key):
 # %%
 s(1, jrnd.PRNGKey(1))
 # %%
+
+class Tester7:
+    def __init__(self, a):
+        self.a = a 
+
+    # @partial(jit, static_argnums=(0,))
+    def f(self, ts):
+        return [self.a[i] * ti ** 2 for i, ti in enumerate(ts)]
+
+class Tester8(Tester7):
+    def __init__(self, a):
+        super().__init__([a])
+
+    # @partial(jit, static_argnums=(0,))
+    def f(self, t):
+        return super().f([t])[0]
+
+print(Tester8(10.).f(5.))
+Tester7([10.0, 10.0]).f([5., 5.])
+# %%

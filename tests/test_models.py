@@ -90,18 +90,15 @@ def set_var_nvkm():
         [t1, t2, t3],
         jnp.linspace(-5, 5, 2).reshape(-1, 1),
         data,
-        vi.IndependentGaussians,
         q_pars_init=q_pars_init3,
         lsgs=[1.0, 2.0, 1.0],
         ampgs=[1.0, 1.0, 1.0],
         noise=0.01,
-        C=3,
     )
 
 
 def set_nvkm():
     keys = jrnd.split(jrnd.PRNGKey(5), 10)
-    t = jnp.linspace(-20, 20, 200)
 
     t1 = jnp.linspace(-2.0, 2, 10).reshape(-1, 1)
     t2 = 2 * jrnd.uniform(keys[0], shape=(5, 2)) - 1.0
@@ -113,7 +110,6 @@ def set_nvkm():
         vgs=[jnp.sin(t1).flatten(), jnp.sin(t2[:, 0] ** 2), jnp.sin(t3[:, 0] ** 2)],
         lsgs=[1.0, 2.0, 1.0],
         ampgs=[1.0, 1.0, 1.0],
-        C=3,
     )
 
 

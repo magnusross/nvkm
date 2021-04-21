@@ -60,9 +60,9 @@ def test_I1(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.1,
-        alpha=1.2,
-        pu=1.3,
+        1.1,
+        1.2,
+        1.3,
     )
     fi1 = integrals.fast_I1(
         data_maker["t"],
@@ -74,9 +74,9 @@ def test_I1(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.1,
-        alpha=1.2,
-        pu=1.3,
+        1.1,
+        1.2,
+        1.3,
     )
 
     assert jnp.isclose(si1, fi1)
@@ -92,10 +92,10 @@ def test_I2(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.1,
-        alpha=1.2,
-        pg=1.3,
-        pu=1.4,
+        1.1,
+        1.2,
+        1.3,
+        1.4,
     )
     fi2 = integrals.fast_I2(
         data_maker["t"],
@@ -106,10 +106,10 @@ def test_I2(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.1,
-        alpha=1.2,
-        pg=1.3,
-        pu=1.4,
+        1.1,
+        1.2,
+        1.3,
+        1.4,
     )
     assert jnp.isclose(si2, fi2)
 
@@ -128,10 +128,10 @@ def test_I(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.1,
-        alpha=1.2,
-        pg=1.3,
-        pu=1.4,
+        1.1,
+        1.2,
+        1.3,
+        1.4,
     )
     fi = integrals.fast_I(
         data_maker["t"],
@@ -146,9 +146,9 @@ def test_I(data_maker):
         data_maker["wus"],
         data_maker["qus"],
         data_maker["sigg"],
-        sigu=1.1,
-        alpha=1.2,
-        pg=1.3,
-        pu=1.4,
+        1.1,
+        1.2,
+        1.3,
+        1.4,
     )
     assert jnp.isclose(si, fi)

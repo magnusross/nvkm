@@ -296,296 +296,7 @@ class NVKM:
         plt.show()
 
 
-class VariationalNVKM(NVKM):
-    def __init__(
-        self,
-        zgs: List[jnp.DeviceArray],
-        zu: jnp.DeviceArray,
-        data: Tuple[jnp.DeviceArray, jnp.DeviceArray],
-        q_class: IndependentGaussians,
-        q_pars_init: Union[VIPars, None] = None,
-        q_initializer_pars=None,
-        likelihood: Callable = gaussain_likelihood,
-        N_basis: int = 500,
-        C: int = 1,
-        ampgs: List[float] = [1.0],
-        noise: float = 0.5,
-        alpha: float = 1.0,
-        lsgs: List[float] = [1.0],
-        lsu: float = 1.0,
-        ampu: float = 1.0,
-    ):
-
-        self.zgs = zgs
-        self.vgs = [None] * C
-        self.zu = zu
-        self.vu = None
-
-        self.N_basis = N_basis
-        self.C = C
-        self.noise = noise
-        self.alpha = alpha
-
-        self.lsgs = lsgs
-        self.lsu = lsu
-        self.ampgs = ampgs
-        self.ampu = ampu
-
-        self.g_gps = self.set_G_gps(ampgs, lsgs)
-        self.u_gp = self.set_u_gp(ampu, lsu)
-
-        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
-        self.data = data
-        self.likelihood = likelihood
-        self.q_of_v = q_class()
-        if q_pars_init is None:
-            q_pars_init = self.q_of_v.initialize(self, q_initializer_pars)
-        self.q_pars = q_pars_init
-
-    def set_G_gps(self, ampgs, lsgs):
-        gps = [
-            EQApproxGP(
-                z=self.zgs[i],
-                v=self.vgs[i],
-                N_basis=self.N_basis,
-                D=i + 1,
-                ls=lsgs[i],
-                amp=ampgs[i],
-            )
-            for i in range(self.C)
-        ]
-        return gps
-
-    def set_u_gp(self, ampu, lsu):
-        return EQApproxGP(
-            z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
-        )
-
-    @partial(jit, static_argnums=(0,))
-    def _compute_p_pars(self, ampgs, lsgs, ampu, lsu):
-        return {
-            "LK_gs": [
-                self.g_gps[i].compute_covariances(ampgs[i], lsgs[i])[1]
-                for i in range(self.C)
-            ],
-            "LK_u": self.u_gp.compute_covariances(ampu, lsu)[1],
-        }
-
-    def sample_diag_g_gps(self, ts, N_s, key=jrnd.PRNGKey(1)):
-        skey = jrnd.split(key, N_s + 1)
-        v_gs = self.q_of_v.sample(self.q_pars, N_s, skey[0])["gs"]
-        #         print(v_gs[1][1])
-        return [
-            vmap(lambda vi, keyi: gp._sample(ts[i], vi, gp.amp, 1, keyi).flatten())(
-                v_gs[i], skey[1:]
-            ).T
-            for i, gp in enumerate(self.g_gps)
-        ]
-
-    def sample_u_gp(self, t, N_s, key=jrnd.PRNGKey(1)):
-        skey = jrnd.split(key, N_s + 1)
-
-        v_u = self.q_of_v.sample(self.q_pars, N_s, skey[0])["u"]
-
-        return vmap(
-            lambda vi, keyi: self.u_gp._sample(
-                t, vi, self.u_gp.amp, 1, key=keyi
-            ).flatten()
-        )(v_u, skey[1:]).T
-
-    @partial(jit, static_argnums=(0, 4))
-    def _sample(self, t, q_pars, ampgs, N_s, key):
-
-        skey = jrnd.split(key, 5)
-        v_samps = self.q_of_v.sample(q_pars, N_s, skey[4])
-
-        u_gp = self.u_gp
-        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
-        betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
-        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), u_gp.amp)
-
-        qul = vmap(
-            lambda vui, thi, bi, wi: u_gp.compute_q(vui, u_gp.LKvv, thi, bi, wi)
-        )(v_samps["u"], thetaul, betaul, wul)
-
-        samps = jnp.zeros((len(t), N_s))
-        for i in range(0, self.C):
-            skey = jrnd.split(skey[3], 4)
-
-            G_gp_i = self.g_gps[i]
-            thetagl = G_gp_i.sample_thetas(
-                skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
-            )
-            betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
-            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
-
-            # id_print(jnp.any(jnp.isnan(G_gp_i.LKvv)))
-            # id_print(jnp.any(jnp.isnan(G_gp_i.LKvv)))
-            _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
-            qgl = vmap(
-                lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
-            )(v_samps["gs"][i], thetagl, betagl, wgl)
-            # samps += jnp.zeros((len(t), N_s))
-            samps += vmap_scan(
-                lambda ti: vmap(
-                    lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
-                        ti,
-                        G_gp_i.z,
-                        u_gp.z,
-                        thetags,
-                        betags,
-                        thetaus,
-                        betaus,
-                        wgs,
-                        qgs,
-                        wus,
-                        qus,
-                        ampgs[i],
-                        sigu=u_gp.amp,
-                        alpha=self.alpha,
-                        pg=G_gp_i.pr,
-                        pu=u_gp.pr,
-                    )
-                )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
-                t,
-            )
-
-        return samps
-
-    def sample(self, t, N_s, key=jrnd.PRNGKey(1)):
-        return self._sample(t, self.q_pars, self.ampgs, N_s, key)
-
-    @partial(jit, static_argnums=(0, 5))
-    def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key):
-        p_pars = self._compute_p_pars(ampgs, self.lsgs, self.ampu, self.lsu)
-
-        for j in range(self.C):
-            q_pars["LC_gs"][j] = choleskyize(q_pars["LC_gs"][j])
-        q_pars["LC_u"] = choleskyize(q_pars["LC_u"])
-
-        KL = self.q_of_v.KL(p_pars, q_pars)
-
-        x, y = data
-        samples = self._sample(x, q_pars, ampgs, N_s, key)
-        # id_print(jnp.any(jnp.isnan(samples)))
-        like = self.likelihood(y, samples, noise)
-        # id_print(KL)
-        # id_print(like)
-        return -(KL + like)
-
-    def compute_bound(self, N_s, key=jrnd.PRNGKey(1)):
-        return self._compute_bound(
-            self.data, self.q_pars, self.ampgs, self.noise, N_s, key
-        )
-
-    def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
-
-        x, y = self.data
-
-        opt_init, opt_update, get_params = opt.adam(lr)
-
-        dpars = {"q_pars": self.q_pars, "noise": self.noise, "ampgs": self.ampgs}
-        opt_state = opt_init(dpars)
-
-        for i in range(its):
-            skey, key = jrnd.split(key, 2)
-            if batch_size:
-                rnd_idx = jrnd.choice(key, len(y), shape=(batch_size,))
-                y_b = y[rnd_idx]
-                x_b = x[rnd_idx]
-            else:
-                y_b = y
-                x_b = x
-
-            # print(get_params(opt_state))
-            value, grads = value_and_grad(
-                lambda dp: self._compute_bound(
-                    (x_b, y_b), dp["q_pars"], dp["ampgs"], dp["noise"], N_s, skey
-                )
-            )(dpars)
-            opt_state = opt_update(i, grads, opt_state)
-
-            for k in dpars.keys():
-                if k not in dont_fit:
-                    dpars[k] = get_params(opt_state)[k]
-            #             print(dpars["q_pars"]["mu_u"])
-            # this ensurse array are lower triangular
-            # should prob go elsewhere
-
-            if jnp.any(jnp.isnan(value)):
-                print("nan F!!")
-                return dpars
-
-            elif i % 10 == 0:
-                print(f"it: {i} F: {value} ")
-
-        # when optimisation complete, set attributes to be new ones
-        # and update computations
-        for j in range(self.C):
-            dpars["q_pars"]["LC_gs"][j] = choleskyize(dpars["q_pars"]["LC_gs"][j])
-        dpars["q_pars"]["LC_u"] = choleskyize(dpars["q_pars"]["LC_u"])
-
-        for k in dpars.keys():
-            setattr(self, k, dpars[k])
-
-        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
-        self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
-        self.u_gp = self.set_u_gp(self.ampu, self.lsu)
-
-    def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
-        skey = jrnd.split(key, 2)
-
-        fig, axs = plt.subplots(2, 1, figsize=(10, 7))
-        samps = self.sample(t, N_s, key=skey[0])
-        axs[0].plot(t, samps, c="green", alpha=0.5)
-        axs[0].scatter(*self.data, label="Data", marker="x", c="blue")
-        axs[0].legend()
-        u_samps = self.sample_u_gp(t, N_s, key=skey[1])
-
-        axs[1].plot(t, u_samps, c="blue", alpha=0.5)
-        axs[1].scatter(
-            self.u_gp.z,
-            self.q_pars["mu_u"],
-            label="Inducing Points",
-            marker="x",
-            c="green",
-        )
-        axs[1].legend()
-        if save:
-            plt.savefig(save)
-        plt.show()
-
-    def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(1)):
-
-        ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps]
-        g_samps = self.sample_diag_g_gps(ts, N_s, key=key)
-
-        fig, axs = plt.subplots(self.C, 1, figsize=(8, 5 * self.C))
-        for i in range(self.C):
-            if self.C == 1:
-                ax = axs
-            else:
-                ax = axs[i]
-            y = g_samps[i].T * jnp.exp(-self.alpha * (t) ** 2)
-            ax.plot(t, y.T, c="red", alpha=0.5)
-            ax.set_title(f"$G_{i}$")
-
-        if save:
-            plt.savefig(save)
-        plt.show()
-
-    def save(self, f_name):
-        # with open(f_name, 'wb') as output:  # Overwrites any existing file.
-        # pickle.dump(self.__dict__, output, pickle.HIGHEST_PROTOCOL)
-        jnp.savez(f_name, **self.__dict__)
-
-
-class IONVKM(VariationalNVKM):
-    def __init__(self, zgs, u_data, y_data, q_class):
-        raise NotImplementedError
-
-
-class MultiOutputNVKM:
+class MOVarNVKM:
     def __init__(
         self,
         zgs: List[List[jnp.DeviceArray]],
@@ -598,7 +309,7 @@ class MultiOutputNVKM:
         N_basis: int = 500,
         ampgs: List[List[float]] = [[1.0], [1.0]],
         noise: List[float] = [1.0, 1.0],
-        alpha: List[float] = 1.0,
+        alpha: List[float] = [1.0, 1.0],
         lsgs: List[List[float]] = [[1.0], [1.0]],
         lsu: float = 1.0,
         ampu: float = 1.0,
@@ -695,20 +406,22 @@ class MultiOutputNVKM:
             ).flatten()
         )(v_u, skey[1:]).T
 
-    @partial(jit, static_argnums=(0, 4))
-    def _sample(self, ts, q_pars, ampgs, N_s, key):
+    @partial(jit, static_argnums=(0, 7))
+    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, key):
 
         skey = jrnd.split(key, 5)
         v_samps = self.q_of_v.sample(q_pars, N_s, skey[4])
 
         u_gp = self.u_gp
-        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
+        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), lsu)
         betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
-        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), u_gp.amp)
+        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), ampu)
 
-        qul = vmap(
-            lambda vui, thi, bi, wi: u_gp.compute_q(vui, u_gp.LKvv, thi, bi, wi)
-        )(v_samps["u"], thetaul, betaul, wul)
+        _, u_LKvv = u_gp.compute_covariances(ampu, lsu)
+
+        qul = vmap(lambda vui, thi, bi, wi: u_gp.compute_q(vui, u_LKvv, thi, bi, wi))(
+            v_samps["u"], thetaul, betaul, wul
+        )
 
         samps = []
         for i in range(self.O):
@@ -719,11 +432,11 @@ class MultiOutputNVKM:
                 G_gp_i = self.g_gps[i][j]
 
                 thetagl = G_gp_i.sample_thetas(
-                    skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
+                    skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), lsgs[i][j]
                 )
                 betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
-                wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
-                _, G_LKvv = G_gp_i.compute_covariances(ampgs[i][j], G_gp_i.ls)
+                wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), ampgs[i][j])
+                _, G_LKvv = G_gp_i.compute_covariances(ampgs[i][j], lsgs[i][j])
 
                 qgl = vmap(
                     lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
@@ -744,10 +457,10 @@ class MultiOutputNVKM:
                             wus,
                             qus,
                             ampgs[i][j],
-                            sigu=u_gp.amp,
-                            alpha=self.alpha[i],
-                            pg=G_gp_i.pr,
-                            pu=u_gp.pr,
+                            ampu,
+                            self.alpha[i],
+                            l2p(lsgs[i][j]),
+                            l2p(lsgs[i][j]),
                         )
                     )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
                     ts[i],
@@ -756,10 +469,12 @@ class MultiOutputNVKM:
         return samps
 
     def sample(self, ts, N_s, key=jrnd.PRNGKey(1)):
-        return self._sample(ts, self.q_pars, self.ampgs, N_s, key)
+        return self._sample(
+            ts, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key
+        )
 
-    @partial(jit, static_argnums=(0, 5))
-    def _compute_bound(self, data, q_pars, ampgs, noise, N_s, key):
+    @partial(jit, static_argnums=(0, 8))
+    def _compute_bound(self, data, q_pars, ampgs, lsgs, ampu, lsu, noise, N_s, key):
         p_pars = self._compute_p_pars(ampgs, self.lsgs, self.ampu, self.lsu)
 
         for i in range(self.O):
@@ -770,13 +485,24 @@ class MultiOutputNVKM:
         KL = self.q_of_v.KL(p_pars, q_pars)
 
         xs, ys = data
-        samples = self._sample(xs, q_pars, ampgs, N_s, key)
+        samples = self._sample(xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, key)
         like = 0.0
         for i in range(self.O):
             like += self.likelihood(ys[i], samples[i], noise[i])
-        # id_print(KL)
-        # id_print(like)
         return -(KL + like)
+
+    def compute_bound(self, N_s, key=jrnd.PRNGKey(1)):
+        return self._compute_bound(
+            self.data,
+            self.q_pars,
+            self.ampgs,
+            self.lsgs,
+            self.ampu,
+            self.lsu,
+            self.noise,
+            N_s,
+            key,
+        )
 
     def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
 
@@ -784,7 +510,14 @@ class MultiOutputNVKM:
 
         opt_init, opt_update, get_params = opt.adam(lr)
 
-        dpars = {"q_pars": self.q_pars, "noise": self.noise, "ampgs": self.ampgs}
+        dpars = {
+            "q_pars": self.q_pars,
+            "ampgs": self.ampgs,
+            "lsgs": self.lsgs,
+            "ampu": self.ampu,
+            "lsu": self.lsu,
+            "noise": self.noise,
+        }
         opt_state = opt_init(dpars)
 
         for i in range(its):
@@ -804,7 +537,15 @@ class MultiOutputNVKM:
 
             value, grads = value_and_grad(
                 lambda dp: self._compute_bound(
-                    (x_bs, y_bs), dp["q_pars"], dp["ampgs"], dp["noise"], N_s, skey
+                    (x_bs, y_bs),
+                    dp["q_pars"],
+                    dp["ampgs"],
+                    dp["lsgs"],
+                    dp["ampu"],
+                    dp["lsu"],
+                    dp["noise"],
+                    N_s,
+                    skey,
                 )
             )(dpars)
             opt_state = opt_update(i, grads, opt_state)
@@ -870,3 +611,67 @@ class MultiOutputNVKM:
             plt.savefig(save)
         plt.show()
 
+
+class VariationalNVKM(MOVarNVKM):
+    def __init__(
+        self,
+        zgs: List[jnp.DeviceArray],
+        zu: jnp.DeviceArray,
+        data: Tuple[jnp.DeviceArray, jnp.DeviceArray],
+        ampgs: List[float] = [1.0],
+        lsgs: List[float] = [1.0],
+        noise: float = 0.5,
+        alpha: float = 1.0,
+        q_pars_init: Union[VIPars, None] = None,
+        **kwargs,
+    ):
+        if q_pars_init is not None:
+            q_pars_init["mu_gs"] = [q_pars_init["mu_gs"]]
+            q_pars_init["LC_gs"] = [q_pars_init["LC_gs"]]
+
+        super().__init__(
+            [zgs],
+            zu,
+            ([data[0]], [data[1]]),
+            ampgs=[ampgs],
+            lsgs=[lsgs],
+            noise=[noise],
+            alpha=[alpha],
+            q_pars_init=q_pars_init,
+            **kwargs,
+        )
+
+    def sample(self, t, N_s, key=jrnd.PRNGKey(1)):
+        if not isinstance(t, list):
+            return self._sample(
+                [t], self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key
+            )[0]
+        else:
+            return self._sample(
+                t, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key
+            )
+
+    def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(13)):
+        super().plot_samples(t, [t], N_s, save=save, key=key)
+
+    def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(1)):
+        ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps[0]]
+        g_samps = self.sample_diag_g_gps([ts], N_s, key=key)[0]
+        fig, axs = plt.subplots(self.C[0], 1, figsize=(8, 5 * self.C[0]))
+        for i in range(self.C[0]):
+            if self.C[0] == 1:
+                ax = axs
+            else:
+                ax = axs[i]
+            y = g_samps[i].T * jnp.exp(-self.alpha[0] * (t) ** 2)
+            ax.plot(t, y.T, c="red", alpha=0.5)
+            ax.set_title(f"$G_{i}$")
+
+        if save:
+            plt.savefig(save)
+        plt.show()
+
+
+class IONVKM(VariationalNVKM):
+    def __init__(self, zgs, u_data, y_data, q_class):
+        raise NotImplementedError

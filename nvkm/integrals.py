@@ -41,7 +41,7 @@ def integ_2b(t, alpha, p1, z1, p2, z2):
 
 
 def slow_I1(
-    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
+    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
 ):
     c = thetag.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
@@ -68,7 +68,7 @@ def slow_I1(
 
 @jit
 def fast_I1(
-    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pu=1.0,
+    t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
 ):
     # number of basis functions
 
@@ -91,9 +91,7 @@ def fast_I1(
     return 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
 
 
-def slow_I2(
-    t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
-):
+def slow_I2(t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
     c = zg.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
     Mu = zus.shape[0]  # number of u inducing points
@@ -114,9 +112,7 @@ def slow_I2(
 
 
 @jit
-def fast_I2(
-    t, zg, zus, thetus, betaus, wus, qus, sigg, sigu=1.0, alpha=1.0, pg=1.0, pu=1.0
-):
+def fast_I2(t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
     o1 = vmap(
         lambda zgij: map_reduce(
             lambda wi, thetui, betaui: wi
@@ -170,24 +166,13 @@ def slow_I(
             wus,
             qus,
             sigg,
-            sigu=sigu,
-            alpha=alpha,
-            pu=pu,
+            sigu,
+            alpha,
+            pu,
         )
     for j in range(Mg):
         out += qgs[j] * slow_I2(
-            t,
-            zgs[j],
-            zus,
-            thetus,
-            betaus,
-            wus,
-            qus,
-            sigg,
-            sigu=sigu,
-            alpha=alpha,
-            pu=pu,
-            pg=pg,
+            t, zgs[j], zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,
         )
     return out
 
@@ -206,27 +191,16 @@ def fast_I(
     wus,
     qus,
     sigg,
-    sigu=1.0,
-    alpha=1.0,
-    pg=1.0,
-    pu=1.0,
+    sigu,
+    alpha,
+    pg,
+    pu,
 ):
 
     o1 = map_reduce_1vec(
         lambda thetagi, betagi, wgi,: wgi
         * fast_I1(
-            t,
-            zus,
-            thetagi,
-            betagi,
-            thetus,
-            betaus,
-            wus,
-            qus,
-            sigg,
-            sigu=sigu,
-            alpha=alpha,
-            pu=pu,
+            t, zus, thetagi, betagi, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
         ),
         thetags,
         betags,
@@ -235,20 +209,7 @@ def fast_I(
 
     o2 = map_reduce_1vec(
         lambda zgi, qgi: qgi
-        * fast_I2(
-            t,
-            zgi,
-            zus,
-            thetus,
-            betaus,
-            wus,
-            qus,
-            sigg,
-            sigu=sigu,
-            alpha=alpha,
-            pg=pg,
-            pu=pu,
-        ),
+        * fast_I2(t, zgi, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,),
         zgs,
         qgs,
     )

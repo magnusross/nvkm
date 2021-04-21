@@ -1,7 +1,7 @@
 #%%
 import argparse
 from nvkm.utils import generate_C2_volterra_data
-from nvkm.models import MultiOutputNVKM
+from nvkm.models import MOVarNVKM
 
 from jax.config import config
 
@@ -23,7 +23,7 @@ t3 = 2 * jrnd.uniform(jrnd.PRNGKey(101), (Nvg, 3)) - 1
 
 zgs = [[t1, t2], [t1, t2, t3], [t1, t2]]
 
-var_model2 = MultiOutputNVKM(
+var_model2 = MOVarNVKM(
     zgs,
     jnp.linspace(-17, 17, Nvu).reshape(-1, 1),
     None,

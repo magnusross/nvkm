@@ -80,7 +80,6 @@ var_model2 = VariationalNVKM(
     [t1, t2],
     jnp.linspace(-7, 7, Nvu).reshape(-1, 1),
     data,
-    IndependentGaussians,
     q_pars_init=q_pars_init,
     lsgs=args.lsgs,
     ampgs=args.ampsgs_init,
@@ -88,7 +87,6 @@ var_model2 = VariationalNVKM(
     alpha=args.alpha,
     lsu=args.lsu,
     ampu=args.ampu,
-    C=2,
 )
 dont_fit = []
 if not bool(args.fit_noise):
@@ -96,7 +94,8 @@ if not bool(args.fit_noise):
 
 # plot_c2_filter_multi(var_model2, tf, 10, save=args.f_name + 'var_c2f.png', variational=True)
 # var_model2.plot_samples(jnp.linspace(-7, 7, 50), 5)
-var_model2.plot_filters(tf, 5)
+# var_model2.plot_filters(tf, 5)
+var_model2.compute_bound(3)
 #%%
 # import matplotlib.pyplot as plt
 

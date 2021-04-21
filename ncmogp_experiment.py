@@ -3,7 +3,7 @@ import argparse
 
 from jax.config import config
 
-from nvkm.models import MultiOutputNVKM
+from nvkm.models import MOVarNVKM
 
 config.update("jax_enable_x64", True)
 import jax.numpy as jnp
@@ -75,7 +75,7 @@ tm2 = jnp.meshgrid(t2p, t2p)
 t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 zgs = [[t1, t2], [t1, t2], [t1, t2]]
 
-var_model2 = MultiOutputNVKM(
+var_model2 = MOVarNVKM(
     zgs,
     jnp.linspace(-0.1, 1.1, Nvu).reshape(-1, 1),
     data,
@@ -106,6 +106,6 @@ if not bool(args.fit_noise):
 var_model2.fit(args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=["noise"])
 
 
-var_model2.plot_filters(tf, N_s, save=args.f_name + "fit_samples.png")
+var_model2.plot_filters(tf, N_s, save=args.f_name + "fit_filters.png")
 var_model2.plot_samples(t, ts, N_s, save=args.f_name + "fit_samples.png")
 # %%
