@@ -279,7 +279,7 @@ class NVKM:
     def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, 2)
 
-        fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+        _, axs = plt.subplots(2, 1, figsize=(10, 7))
         samps = self.sample(t, N_s, key=skey[0])
         axs[0].plot(t, samps, c="green", alpha=0.5)
         axs[0].legend()
@@ -570,7 +570,7 @@ class MOVarNVKM:
 
     def plot_samples(self, tu, tys, N_s, save=False, key=jrnd.PRNGKey(304)):
 
-        fig, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
+        _, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
 
         u_samps = self.sample_u_gp(tu, N_s, key=key)
         axs[0].set_ylabel(f"$u$")
@@ -596,7 +596,7 @@ class MOVarNVKM:
         ]
         g_samps = self.sample_diag_g_gps(tfs, 10)
 
-        fig, axs = plt.subplots(
+        _, axs = plt.subplots(
             max(self.C), self.O, figsize=(4 * self.O, 2 * max(self.C)),
         )
         for i in range(self.O):
@@ -657,7 +657,7 @@ class VariationalNVKM(MOVarNVKM):
     def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(1)):
         ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps[0]]
         g_samps = self.sample_diag_g_gps([ts], N_s, key=key)[0]
-        fig, axs = plt.subplots(self.C[0], 1, figsize=(8, 5 * self.C[0]))
+        _, axs = plt.subplots(self.C[0], 1, figsize=(8, 5 * self.C[0]))
         for i in range(self.C[0]):
             if self.C[0] == 1:
                 ax = axs
