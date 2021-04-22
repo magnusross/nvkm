@@ -38,7 +38,6 @@ var_model1 = VariationalNVKM(
     [t1],
     jnp.linspace(-44, 44, Nvu).reshape(-1, 1),
     data,
-    IndependentGaussians,
     q_pars_init=None,
     q_initializer_pars=0.3,
     lsgs=args.lsgs,

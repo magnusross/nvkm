@@ -1,7 +1,7 @@
 import argparse
+
 from nvkm.utils import generate_C2_volterra_data
 from nvkm.models import NVKM, VariationalNVKM
-from nvkm.vi import IndependentGaussians
 from jax.config import config
 
 config.update("jax_enable_x64", True)
@@ -67,7 +67,6 @@ var_model2 = VariationalNVKM(
     [t1, t2],
     jnp.linspace(-17, 17, Nvu).reshape(-1, 1),
     data,
-    IndependentGaussians,
     q_pars_init=None,
     q_initializer_pars=args.q_frac,
     lsgs=args.lsgs,
@@ -77,12 +76,11 @@ var_model2 = VariationalNVKM(
     lsu=args.lsu,
     ampu=args.ampu,
     N_basis=args.Nbasis,
-    C=2,
 )
 dont_fit = []
 if not bool(args.fit_noise):
     dont_fit.append("noise")
-
+print(var_model2.C)
 var_model2.plot_samples(
     jnp.linspace(-17, 17, 150), 15, save=args.f_name + "c2_samps_pre.png"
 )
