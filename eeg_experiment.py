@@ -38,10 +38,11 @@ def make_data(df):
     ys = []
     x = jnp.array(df.index)
     for key in df.keys():
-        yi = jnp.array(df[key])
-        xs.append(x[~jnp.isnan(yi)])
-        ysi = yi[~jnp.isnan(yi)]
-        ys.append(ysi / jnp.std(ysi))
+        if key in ["F2", "F3", "F4"]:
+            yi = jnp.array(df[key])
+            xs.append(x[~jnp.isnan(yi)])
+            ysi = yi[~jnp.isnan(yi)]
+            ys.append(ysi / jnp.std(ysi))
     return (xs, ys)
 
 
@@ -49,7 +50,7 @@ train_data = make_data(train_df)
 # %%
 Nvu = args.Nvu
 Nvg = args.Nvg
-O = 7
+O = 3
 
 t1 = jnp.linspace(0.02, -0.02, Nvg).reshape(-1, 1)
 tf = jnp.linspace(0.015, -0.015, int(jnp.sqrt(Nvg)))

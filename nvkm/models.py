@@ -1,20 +1,21 @@
+import logging
+import pickle
 from functools import partial
 from typing import Callable, List, Tuple, Union
-import logging
-from jax.config import config
-import pickle
+
 import jax.experimental.optimizers as opt
 import jax.numpy as jnp
 import jax.random as jrnd
 import jax.scipy as jsp
-from jax.ops import index_add, index
 import matplotlib.pyplot as plt
-from jax import jit, vmap, value_and_grad
+from jax import jit, value_and_grad, vmap
+from jax.config import config
 from jax.experimental.host_callback import id_print
+from jax.ops import index, index_add
 
 from .integrals import fast_I
 from .settings import JITTER
-from .utils import eq_kernel, l2p, map2matrix, vmap_scan, choleskyize
+from .utils import choleskyize, eq_kernel, l2p, map2matrix, vmap_scan
 from .vi import (
     IndependentGaussians,
     MOIndependentGaussians,
@@ -76,18 +77,13 @@ class EQApproxGP:
         LKvv = jnp.linalg.cholesky(Kvv)
         return Kvv, LKvv
 
-    # @partial(jit, static_argnums=(0,))
-    # def fast_covariance_recompute(self, new_amp):
-    #     factor = new_amp ** 2 / self.amp ** 2
-    #     return factor * self.Kvv, factor * self.LKvv
-
     @partial(jit, static_argnums=(0,))
     def kernel(self, t, tp, amp, ls):
         return eq_kernel(t, tp, amp, ls)
 
     @partial(jit, static_argnums=(0, 2))
     def sample_thetas(self, key, shape, ls):
-        # FT of isotropic gaussain is inverser varience
+        # FT of isotropic gaussain is inverse varience
         return jrnd.normal(key, shape) / ls
 
     @partial(jit, static_argnums=(0, 2))
