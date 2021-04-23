@@ -12,6 +12,7 @@ from jax import jit, value_and_grad, vmap
 from jax.config import config
 from jax.experimental.host_callback import id_print
 from jax.ops import index, index_add
+from collections import OrderedDict
 
 from .integrals import fast_I
 from .settings import JITTER
@@ -108,24 +109,18 @@ class EQApproxGP:
         b = v - Phi @ ws
         return jsp.linalg.cho_solve((LKvv, True), b)
 
-    @partial(jit, static_argnums=(0, 4))
-    def _sample(self, t, v, amp, Ns, key=jrnd.PRNGKey(1)):
-
-        try:
-            assert t.shape[1] == self.D
-
-        except IndexError:
-            t = t.reshape(-1, 1)
-            assert self.D == 1
-
-        except AssertionError:
-            raise ValueError("Dimension of input does not match dimension of GP.")
-        # sample random parameters
+    @partial(jit, static_argnums=(0, 2))
+    def sample_basis(self, key, Ns, amp, ls):
         skey = jrnd.split(key, 3)
-        thetas = self.sample_thetas(skey[0], (Ns, self.N_basis, self.D), self.ls)
+        thetas = self.sample_thetas(skey[0], (Ns, self.N_basis, self.D), ls)
         betas = self.sample_betas(skey[1], (Ns, self.N_basis))
         ws = self.sample_ws(skey[2], (Ns, self.N_basis), amp)
+        return thetas, betas, ws
 
+    @partial(jit, static_argnums=(0, 5))
+    def _sample(self, t, vs, amp, ls, Ns, key):
+        # sample random parameters
+        thetas, betas, ws = self.sample_basis(key, Ns, amp, ls)
         # fourier basis part
         samps = vmap(
             lambda ti: vmap(lambda thi, bi, wi: jnp.dot(wi, self.phi(ti, thi, bi)))(
@@ -134,13 +129,12 @@ class EQApproxGP:
         )(t)
 
         # canonical basis part
-        if v is None:
-            pass
-        else:
-            qs = vmap(lambda thi, bi, wi: self.compute_q(v, self.LKvv, thi, bi, wi))(
-                thetas, betas, ws
+        if vs is not None:
+            _, LKvv = self.compute_covariances(amp, ls)
+            qs = vmap(lambda vi, thi, bi, wi: self.compute_q(vi, LKvv, thi, bi, wi))(
+                vs, thetas, betas, ws
             )  # Ns x Nz
-            kv = map2matrix(self.kernel, t, self.z, amp, self.ls)  # Nt x Nz
+            kv = map2matrix(self.kernel, t, self.z, amp, ls)  # Nt x Nz
             kv = jnp.einsum("ij, kj", qs, kv)  # Nt x Ns
 
             samps += kv.T
@@ -148,8 +142,20 @@ class EQApproxGP:
         return samps
 
     def sample(self, t, Ns=100, key=jrnd.PRNGKey(1)):
+        try:
+            assert t.shape[1] == self.D
+        except IndexError:
+            t = t.reshape(-1, 1)
+            assert self.D == 1
+        except AssertionError:
+            raise ValueError("Dimension of input does not match dimension of GP.")
 
-        return self._sample(t, self.v, self.amp, Ns, key=key)
+        if self.v is not None and len(self.v.shape) == 1:
+            vs = jnp.tile(self.v.T, (Ns, 1))
+        else:
+            vs = self.v
+
+        return self._sample(t, vs, self.amp, self.ls, Ns, key)
 
 
 class NVKM:
@@ -215,30 +221,25 @@ class NVKM:
             z=self.zu, v=self.vu, N_basis=self.N_basis, D=1, ls=lsu, amp=ampu
         )
 
-    def _sample(self, t, vgs, vu, ampgs, N_s=10, key=jrnd.PRNGKey(1)):
+    @partial(jit, static_argnums=(0, 8))
+    def _sample(self, t, vgs, vu, ampgs, lsgs, ampu, lsu, N_s, keys):
 
         samps = jnp.zeros((len(t), N_s))
-        skey = jrnd.split(key, 4)
+        # skey = jrnd.split(key, 4)
 
         u_gp = self.u_gp
-        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), u_gp.ls)
-        betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
-        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), u_gp.amp)
+        thetaul, betaul, wul = u_gp.sample_basis(keys[0], N_s, ampu, lsu)
 
-        qul = vmap(lambda thi, bi, wi: u_gp.compute_q(vu, u_gp.LKvv, thi, bi, wi))(
+        _, u_LKvv = u_gp.compute_covariances(ampu, lsu)
+        qul = vmap(lambda thi, bi, wi: u_gp.compute_q(vu, u_LKvv, thi, bi, wi))(
             thetaul, betaul, wul
         )
 
         for i in range(0, self.C):
-            skey = jrnd.split(skey[3], 4)
 
             G_gp_i = self.g_gps[i]
-            thetagl = G_gp_i.sample_thetas(
-                skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), G_gp_i.ls
-            )
-            betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
-            wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), G_gp_i.amp)
-            _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], G_gp_i.ls)
+            thetagl, betagl, wgl = G_gp_i.sample_basis(keys[1], N_s, ampgs[i], lsgs[i])
+            _, G_LKvv = G_gp_i.compute_covariances(ampgs[i], lsgs[i])
             qgl = vmap(
                 lambda thi, bi, wi: G_gp_i.compute_q(vgs[i], G_LKvv, thi, bi, wi)
             )(thetagl, betagl, wgl)
@@ -258,10 +259,10 @@ class NVKM:
                         wus,
                         qus,
                         ampgs[i],
-                        sigu=u_gp.amp,
-                        alpha=self.alpha,
-                        pg=G_gp_i.pr,
-                        pu=u_gp.pr,
+                        ampu,
+                        self.alpha,
+                        l2p(lsgs[i]),
+                        l2p(lsu),
                     )
                 )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
                 t,
@@ -270,7 +271,10 @@ class NVKM:
         return samps
 
     def sample(self, t, N_s=10, key=jrnd.PRNGKey(1)):
-        return self._sample(t, self.vgs, self.vu, self.ampgs, N_s=N_s, key=key)
+        keys = jrnd.split(key)
+        return self._sample(
+            t, self.vgs, self.vu, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, keys
+        )
 
     def plot_samples(self, t, N_s, save=False, key=jrnd.PRNGKey(1)):
         skey = jrnd.split(key, 2)
@@ -372,46 +376,41 @@ class MOVarNVKM:
             "LK_u": self.u_gp.compute_covariances(ampu, lsu)[1],
         }
 
-    def sample_diag_g_gps(self, ts, N_s, key=jrnd.PRNGKey(1)):
-        key = jrnd.split(key)
-        v_gs = self.q_of_v.sample(self.q_pars, N_s, key[1])["gs"]
+    def sample_diag_g_gps(self, ts, N_s, keys):
+        vs = self.q_of_v.sample(self.q_pars, N_s, keys[0])["gs"]
         samps = []
         for i in range(self.O):
             il = []
             for j, gp in enumerate(self.g_gps[i]):
-                key = jrnd.split(key[0], N_s + 1)
+                keys = jrnd.split(keys[1])
                 il.append(
-                    vmap(
-                        lambda vi, keyi: gp._sample(
-                            ts[i][j], vi, gp.amp, 1, keyi
-                        ).flatten()
-                    )(v_gs[i][j], key[1:]).T
+                    gp._sample(
+                        ts[i][j],
+                        vs[i][j],
+                        self.ampgs[i][j],
+                        self.lsgs[i][j],
+                        N_s,
+                        keys[0],
+                    )
                 )
             samps.append(il)
 
         return samps
 
-    def sample_u_gp(self, t, N_s, key=jrnd.PRNGKey(1)):
-        skey = jrnd.split(key, N_s + 1)
-
-        v_u = self.q_of_v.sample(self.q_pars, N_s, skey[0])["u"]
-
-        return vmap(
-            lambda vi, keyi: self.u_gp._sample(
-                t, vi, self.u_gp.amp, 1, key=keyi
-            ).flatten()
-        )(v_u, skey[1:]).T
+    def sample_u_gp(self, t, N_s, keys):
+        vs = self.q_of_v.sample(self.q_pars, N_s, keys[0])["u"]
+        return self.u_gp._sample(
+            t.reshape(-1, 1), vs, self.ampu, self.lsu, N_s, keys[1]
+        )
 
     @partial(jit, static_argnums=(0, 7))
-    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, key):
+    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, keys):
 
-        skey = jrnd.split(key, 5)
-        v_samps = self.q_of_v.sample(q_pars, N_s, skey[4])
+        # skey = jrnd.split(keys, 0)
+        v_samps = self.q_of_v.sample(q_pars, N_s, keys[0])
 
         u_gp = self.u_gp
-        thetaul = u_gp.sample_thetas(skey[0], (N_s, u_gp.N_basis, 1), lsu)
-        betaul = u_gp.sample_betas(skey[1], (N_s, u_gp.N_basis))
-        wul = u_gp.sample_ws(skey[2], (N_s, u_gp.N_basis), ampu)
+        thetaul, betaul, wul = u_gp.sample_basis(keys[1], N_s, ampu, lsu)
 
         _, u_LKvv = u_gp.compute_covariances(ampu, lsu)
 
@@ -423,15 +422,12 @@ class MOVarNVKM:
         for i in range(self.O):
             sampsi = jnp.zeros((len(ts[i]), N_s))
             for j in range(self.C[i]):
-                skey = jrnd.split(skey[3], 4)
 
                 G_gp_i = self.g_gps[i][j]
 
-                thetagl = G_gp_i.sample_thetas(
-                    skey[0], (N_s, G_gp_i.N_basis, G_gp_i.D), lsgs[i][j]
+                thetagl, betagl, wgl = G_gp_i.sample_basis(
+                    keys[2], N_s, ampgs[i][j], lsgs[i][j]
                 )
-                betagl = G_gp_i.sample_betas(skey[1], (N_s, G_gp_i.N_basis))
-                wgl = G_gp_i.sample_ws(skey[2], (N_s, G_gp_i.N_basis), ampgs[i][j])
                 _, G_LKvv = G_gp_i.compute_covariances(ampgs[i][j], lsgs[i][j])
 
                 qgl = vmap(
@@ -456,7 +452,7 @@ class MOVarNVKM:
                             ampu,
                             self.alpha[i],
                             l2p(lsgs[i][j]),
-                            l2p(lsgs[i][j]),
+                            l2p(lsu),
                         )
                     )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
                     ts[i],
@@ -466,12 +462,19 @@ class MOVarNVKM:
 
     def sample(self, ts, N_s, key=jrnd.PRNGKey(1)):
         return self._sample(
-            ts, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key
+            ts,
+            self.q_pars,
+            self.ampgs,
+            self.lsgs,
+            self.ampu,
+            self.lsu,
+            N_s,
+            jrnd.split(key, 3),
         )
 
     @partial(jit, static_argnums=(0, 8))
     def _compute_bound(self, data, q_pars, ampgs, lsgs, ampu, lsu, noise, N_s, key):
-        p_pars = self._compute_p_pars(ampgs, self.lsgs, self.ampu, self.lsu)
+        p_pars = self._compute_p_pars(ampgs, lsgs, ampu, lsu)
 
         for i in range(self.O):
             for j in range(self.C[i]):
@@ -481,7 +484,9 @@ class MOVarNVKM:
         KL = self.q_of_v.KL(p_pars, q_pars)
 
         xs, ys = data
-        samples = self._sample(xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, key)
+        samples = self._sample(
+            xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, jrnd.split(key, 3)
+        )
         like = 0.0
         for i in range(self.O):
             like += self.likelihood(ys[i], samples[i], noise[i])
@@ -514,6 +519,7 @@ class MOVarNVKM:
             "lsu": self.lsu,
             "noise": self.noise,
         }
+
         opt_state = opt_init(dpars)
 
         for i in range(its):
@@ -568,13 +574,13 @@ class MOVarNVKM:
 
         _, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
 
-        u_samps = self.sample_u_gp(tu, N_s, key=key)
+        u_samps = self.sample_u_gp(tu, N_s, jrnd.split(key, 2))
         axs[0].set_ylabel(f"$u$")
         axs[0].set_xlabel("$t$")
         axs[0].scatter(self.zu, self.q_pars["mu_u"], c="blue", alpha=0.5)
         axs[0].plot(tu, u_samps, c="blue", alpha=0.5)
 
-        samps = self.sample(tys, N_s, key=key)
+        samps = self.sample(tys, N_s, key)
         for i in range(0, self.O):
             axs[i + 1].set_ylabel(f"$y_{i+1}$")
             axs[i + 1].set_xlabel("$t$")
@@ -590,18 +596,37 @@ class MOVarNVKM:
             [jnp.vstack((tf for j in range(gp.D))).T for gp in self.g_gps[i]]
             for i in range(self.O)
         ]
-        g_samps = self.sample_diag_g_gps(tfs, 10)
+        g_samps = self.sample_diag_g_gps(tfs, 10, jrnd.split(key, 2))
 
         _, axs = plt.subplots(
-            max(self.C), self.O, figsize=(4 * self.O, 2 * max(self.C)),
+            ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
         )
-        for i in range(self.O):
-            for j in range(self.C[i]):
-                y = g_samps[i][j].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
-                axs[j][i].plot(tf, y.T, c="red", alpha=0.5)
-                axs[j][i].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
-            for k in range(self.C[i], max(self.C)):
-                axs[k][i].axis("off")
+        if max(self.C) == 1 and self.O == 1:
+            y = g_samps[0][0].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+            axs.plot(tf, y.T, c="red", alpha=0.5)
+            axs.set_title("$G_{%s, %s}$" % (1, 1))
+
+        elif max(self.C) == 1:
+            for i in range(self.O):
+                y = g_samps[i][0].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+                axs[i].plot(tf, y.T, c="red", alpha=0.5)
+                axs[i].set_title("$G_{%s, %s}$" % (i + 1, 1))
+
+        elif self.O == 1:
+            for j in range(self.C[0]):
+                y = g_samps[0][j].T * jnp.exp(-self.alpha[0] * (tf) ** 2)
+                axs[i].plot(tf, y.T, c="red", alpha=0.5)
+                axs[i].set_title("$G_{%s, %s}$" % (1, j + 1))
+
+        else:
+            for i in range(self.O):
+                for j in range(self.C[i]):
+                    y = g_samps[i][j].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+                    axs[j][i].plot(tf, y.T, c="red", alpha=0.5)
+                    axs[j][i].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
+                for k in range(self.C[i], max(self.C)):
+                    axs[k][i].axis("off")
+
         plt.tight_layout()
         if save:
             plt.savefig(save)
@@ -651,8 +676,11 @@ class VariationalNVKM(MOVarNVKM):
         super().plot_samples(t, [t], N_s, save=save, key=key)
 
     def plot_filters(self, t, N_s, save=None, key=jrnd.PRNGKey(1)):
+
         ts = [jnp.vstack((t for i in range(gp.D))).T for gp in self.g_gps[0]]
-        g_samps = self.sample_diag_g_gps([ts], N_s, key=key)[0]
+
+        g_samps = self.sample_diag_g_gps([ts], N_s, jrnd.split(key, 2))[0]
+
         _, axs = plt.subplots(self.C[0], 1, figsize=(8, 5 * self.C[0]))
         for i in range(self.C[0]):
             if self.C[0] == 1:
@@ -668,6 +696,169 @@ class VariationalNVKM(MOVarNVKM):
         plt.show()
 
 
-class IONVKM(VariationalNVKM):
-    def __init__(self, zgs, u_data, y_data, q_class):
-        raise NotImplementedError
+class IOMOVarNVKM(MOVarNVKM):
+    def __init__(
+        self,
+        zgs: List[List[jnp.DeviceArray]],
+        zu: jnp.DeviceArray,
+        u_data: Tuple[jnp.DeviceArray],
+        y_data: Tuple[List[jnp.DeviceArray]],
+        u_noise: float = 1.0,
+        **kwargs,
+    ):
+        super().__init__(
+            zgs, zu, None, **kwargs,
+        )
+        self.u_noise = u_noise
+        self.data = (u_data, y_data)
+
+    @partial(jit, static_argnums=(0, 8))
+    def _joint_sample(self, tu, tys, q_pars, ampgs, lsgs, ampu, lsu, N_s, key):
+        keys = jrnd.split(key, 3)
+        vs = self.q_of_v.sample(q_pars, N_s, keys[0])["u"]
+        u_samps = self.u_gp._sample(tu.reshape(-1, 1), vs, ampu, lsu, N_s, keys[1])
+        y_samps = self._sample(tys, q_pars, ampgs, lsgs, ampu, lsu, N_s, keys)
+        return u_samps, y_samps
+
+    def joint_sample(self, tu, tys, N_s, key=jrnd.PRNGKey(1)):
+        return self._joint_sample(
+            tu, tys, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key,
+        )
+
+    @partial(jit, static_argnums=(0, 9))
+    def _compute_bound(
+        self, data, q_pars, ampgs, lsgs, ampu, lsu, noise, u_noise, N_s, key
+    ):
+
+        p_pars = self._compute_p_pars(ampgs, lsgs, ampu, lsu)
+        for i in range(self.O):
+            for j in range(self.C[i]):
+                q_pars["LC_gs"][i][j] = choleskyize(q_pars["LC_gs"][i][j])
+        q_pars["LC_u"] = choleskyize(q_pars["LC_u"])
+
+        KL = self.q_of_v.KL(p_pars, q_pars)
+
+        u_data, y_data = data
+        xs, ys = y_data
+        ui, uo = u_data
+
+        u_samples, y_samples = self._joint_sample(
+            ui, xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, key
+        )
+        like = 0.0
+        for i in range(self.O):
+            like += self.likelihood(ys[i], y_samples[i], noise[i])
+        # id_print(like)
+        like += self.likelihood(uo, u_samples, u_noise)
+        # id_print(KL)
+        # id_print(like)
+        return -(KL + like)
+
+    def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
+
+        u_data, y_data = self.data
+        xu, yu = u_data
+        xs, ys = y_data
+
+        opt_init, opt_update, get_params = opt.adam(lr)
+
+        dpars = {
+            "q_pars": self.q_pars,
+            "ampgs": self.ampgs,
+            "lsgs": self.lsgs,
+            "ampu": self.ampu,
+            "lsu": self.lsu,
+            "noise": self.noise,
+            "u_noise": self.u_noise,
+        }
+
+        opt_state = opt_init(dpars)
+
+        for i in range(its):
+            skey, key = jrnd.split(key, 2)
+
+            if batch_size:
+                bkeys = jrnd.split(key, self.O + 1)
+                u_rnd_idx = jrnd.choice(bkeys[0], len(yu), shape=(batch_size,))
+                yu_bs = yu[u_rnd_idx]
+                xu_bs = xu[u_rnd_idx]
+
+                y_bs = []
+                x_bs = []
+                for j in range(self.O):
+                    y_rnd_idx = jrnd.choice(
+                        bkeys[j + 1], len(ys[j]), shape=(batch_size,)
+                    )
+                    y_bs.append(ys[j][y_rnd_idx])
+                    x_bs.append(xs[j][y_rnd_idx])
+            else:
+                xu_bs = xu
+                yu_bs = yu
+
+                x_bs = xs
+                y_bs = ys
+
+            value, grads = value_and_grad(
+                lambda dp: self._compute_bound(
+                    ((xu_bs, yu_bs), (x_bs, y_bs)),
+                    dp["q_pars"],
+                    dp["ampgs"],
+                    dp["lsgs"],
+                    dp["ampu"],
+                    dp["lsu"],
+                    dp["noise"],
+                    dp["u_noise"],
+                    N_s,
+                    skey,
+                )
+            )(dpars)
+            opt_state = opt_update(i, grads, opt_state)
+
+            for k in dpars.keys():
+                if k not in dont_fit:
+                    dpars[k] = get_params(opt_state)[k]
+
+            if jnp.any(jnp.isnan(value)):
+                print("nan F!!")
+                return dpars
+
+            elif i % 10 == 0:
+                # print(dpars["lsu"])
+                # print(dpars["lsgs"])
+                # print(dpars["ampu"])
+                # print(dpars["ampgs"])
+                print(f"it: {i} F: {value} ")
+
+        for k in dpars.keys():
+            setattr(self, k, dpars[k])
+
+        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
+        self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
+        self.u_gp = self.set_u_gp(self.ampu, self.lsu)
+
+    def plot_samples(self, tu, tys, N_s, save=False, key=jrnd.PRNGKey(304)):
+
+        _, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
+
+        u_data, y_data = self.data
+        u_samps, y_samps = self.joint_sample(tu, tys, N_s, key=key)
+        axs[0].set_ylabel(f"$u$")
+        axs[0].set_xlabel("$t$")
+        axs[0].scatter(
+            self.zu, self.q_pars["mu_u"], c="purple", marker="x", label="$\mu_u$"
+        )
+        axs[0].scatter(u_data[0], u_data[1], c="green", label="Data", alpha=0.5)
+        axs[0].plot(tu, u_samps, c="blue", alpha=0.35)
+        axs[0].legend()
+        for i in range(0, self.O):
+            axs[i + 1].set_ylabel(f"$y_{i+1}$")
+            axs[i + 1].set_xlabel("$t$")
+            axs[i + 1].plot(tys[i], y_samps[i], c="green", alpha=0.35)
+            axs[i + 1].scatter(
+                y_data[0][i], y_data[1][i], label="Data", c="blue", alpha=0.5
+            )
+            axs[i + 1].legend()
+
+        if save:
+            plt.savefig(save)
+        plt.show()

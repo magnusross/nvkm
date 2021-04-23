@@ -53,10 +53,13 @@ var_model2.data = (xs, ys)
 # %%
 var_model2.fit(500, 1e-3, 10, 5)
 # %%
+
 N_s = 10
 tf = jnp.linspace(-3, 3, 100)
 
 var_model2.plot_samples(t, ts, N_s)
+# %%
+
 #%%
 var_model2.plot_filters(tf, N_s)
 # %%
