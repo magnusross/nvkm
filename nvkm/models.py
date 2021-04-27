@@ -570,9 +570,15 @@ class MOVarNVKM:
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
         self.u_gp = self.set_u_gp(self.ampu, self.lsu)
 
-    def plot_samples(self, tu, tys, N_s, save=False, key=jrnd.PRNGKey(304)):
+    def save(self, f_name):
+        with open(f_name, "wb") as file:
+            pickle.dump(self.__dict__, file)
 
-        _, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
+    def plot_samples(
+        self, tu, tys, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(304)
+    ):
+
+        fig, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
 
         u_samps = self.sample_u_gp(tu, N_s, jrnd.split(key, 2))
         axs[0].set_ylabel(f"$u$")
@@ -587,11 +593,16 @@ class MOVarNVKM:
             axs[i + 1].plot(tys[i], samps[i], c="green", alpha=0.5)
             axs[i + 1].scatter(self.data[0][i], self.data[1][i])
 
+        if return_axs:
+            return axs
+
         if save:
             plt.savefig(save)
         plt.show()
 
-    def plot_filters(self, tf, N_s, save=False, key=jrnd.PRNGKey(211)):
+    def plot_filters(
+        self, tf, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(211)
+    ):
         tfs = [
             [jnp.vstack((tf for j in range(gp.D))).T for gp in self.g_gps[i]]
             for i in range(self.O)
@@ -602,7 +613,7 @@ class MOVarNVKM:
             ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
-            y = g_samps[0][0].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+            y = g_samps[0][0].T * jnp.exp(-self.alpha[0] * (tf) ** 2)
             axs.plot(tf, y.T, c="red", alpha=0.5)
             axs.set_title("$G_{%s, %s}$" % (1, 1))
 
@@ -615,8 +626,8 @@ class MOVarNVKM:
         elif self.O == 1:
             for j in range(self.C[0]):
                 y = g_samps[0][j].T * jnp.exp(-self.alpha[0] * (tf) ** 2)
-                axs[i].plot(tf, y.T, c="red", alpha=0.5)
-                axs[i].set_title("$G_{%s, %s}$" % (1, j + 1))
+                axs[j].plot(tf, y.T, c="red", alpha=0.5)
+                axs[j].set_title("$G_{%s, %s}$" % (1, j + 1))
 
         else:
             for i in range(self.O):
@@ -628,6 +639,10 @@ class MOVarNVKM:
                     axs[k][i].axis("off")
 
         plt.tight_layout()
+
+        if return_axs:
+            return axs
+
         if save:
             plt.savefig(save)
         plt.show()
@@ -836,9 +851,11 @@ class IOMOVarNVKM(MOVarNVKM):
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
         self.u_gp = self.set_u_gp(self.ampu, self.lsu)
 
-    def plot_samples(self, tu, tys, N_s, save=False, key=jrnd.PRNGKey(304)):
+    def plot_samples(
+        self, tu, tys, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(304)
+    ):
 
-        _, axs = plt.subplots(self.O + 1, 1, figsize=(10, 3.5 * (1 + self.O)))
+        _, axs = plt.subplots(self.O + 1, 1, figsize=(15, 2.5 * (1 + self.O)))
 
         u_data, y_data = self.data
         u_samps, y_samps = self.joint_sample(tu, tys, N_s, key=key)
@@ -858,6 +875,9 @@ class IOMOVarNVKM(MOVarNVKM):
                 y_data[0][i], y_data[1][i], label="Data", c="blue", alpha=0.5
             )
             axs[i + 1].legend()
+
+        if return_axs:
+            return axs
 
         if save:
             plt.savefig(save)
