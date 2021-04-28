@@ -12,10 +12,18 @@ import pandas as pd
 import argparse
 
 parser = argparse.ArgumentParser(description="Compare CPU and GPU times.")
-parser.add_argument("--Nits", default=10, type=int)
-parser.add_argument("--Nbatch", default=10, type=int)
-parser.add_argument("--lr", default=1e-2, type=float)
-parser.add_argument("--f_name", default="test", type=str)
+parser.add_argument("--Nvu", default=10, type=int)
+parser.add_argument("--Nvg", default=2, type=int)
+parser.add_argument("--zgrange", default=0.1, type=float)
+parser.add_argument("--alpha", default=15.0, type=float)
+parser.add_argument("--Nits", default=1000, type=int)
+parser.add_argument("--lr", default=1e-3, type=float)
+parser.add_argument("--Nbatch", default=30, type=int)
+parser.add_argument("--Nbasis", default=100, type=int)
+parser.add_argument("--Ns", default=20, type=int)
+parser.add_argument("--q_frac", default=0.5, type=float)
+parser.add_argument("--fit_noise", default=0, type=int)
+parser.add_argument("--f_name", default="ncmogp", type=str)
 args = parser.parse_args()
 
 #%%
@@ -42,10 +50,10 @@ modelc2 = IOMOVarNVKM(
     q_initializer_pars=0.4,
     lsgs=[[0.05, 0.06]],
     ampgs=[[7.0, 7.0]],
-    alpha=[l2p(0.1)],
+    alpha=[l2p(0.07)],
     lsu=0.04,
     ampu=1.0,
-    N_basis=50,
+    N_basis=30,
     u_noise=noise,
     noise=[noise],
 )
