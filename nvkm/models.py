@@ -14,7 +14,7 @@ from jax.experimental.host_callback import id_print
 from jax.ops import index, index_add
 from collections import OrderedDict
 
-from .integrals import fast_I
+from .integrals import map_fast_I, fast_I
 from .settings import JITTER
 from .utils import choleskyize, eq_kernel, l2p, map2matrix, vmap_scan
 from .vi import (
@@ -434,28 +434,23 @@ class MOVarNVKM:
                     lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
                 )(v_samps["gs"][i][j], thetagl, betagl, wgl)
                 # samps += jnp.zeros((len(t), N_s))
-                sampsi += vmap_scan(
-                    lambda ti: vmap(
-                        lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
-                            ti,
-                            G_gp_i.z,
-                            u_gp.z,
-                            thetags,
-                            betags,
-                            thetaus,
-                            betaus,
-                            wgs,
-                            qgs,
-                            wus,
-                            qus,
-                            ampgs[i][j],
-                            ampu,
-                            self.alpha[i],
-                            l2p(lsgs[i][j]),
-                            l2p(lsu),
-                        )
-                    )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
+                sampsi += map_fast_I(
                     ts[i],
+                    G_gp_i.z,
+                    u_gp.z,
+                    thetagl,
+                    betagl,
+                    thetaul,
+                    betaul,
+                    wgl,
+                    qgl,
+                    wul,
+                    qul,
+                    ampgs[i][j],
+                    ampu,
+                    self.alpha[i],
+                    l2p(lsgs[i][j]),
+                    l2p(lsu),
                 )
             samps.append(sampsi)
         return samps
