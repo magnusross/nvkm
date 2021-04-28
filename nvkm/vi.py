@@ -77,9 +77,7 @@ class IndependentGaussians(BaseGaussain):
             gp.sample(gp.z, 1, key=skey[i]).flatten()
             for i, gp in enumerate(model.g_gps)
         ]
-        q_pars["mu_u"] = model.u_gp._sample(
-            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=skey[-1]
-        ).flatten()
+        q_pars["mu_u"] = model.u_gp.sample(model.u_gp.z, 1, key=skey[-1]).flatten()
         return q_pars
 
     @partial(jit, static_argnums=(0,))
@@ -129,9 +127,7 @@ class MOIndependentGaussians(BaseGaussain):
                 il.append(gp.sample(gp.z, 1, key=skey).flatten())
             q_pars["mu_gs"].append(il)
 
-        q_pars["mu_u"] = model.u_gp._sample(
-            model.u_gp.z, model.u_gp.v, model.u_gp.amp, 1, key=key
-        ).flatten()
+        q_pars["mu_u"] = model.u_gp.sample(model.u_gp.z, 1, key=key).flatten()
         return q_pars
 
     @partial(jit, static_argnums=(0,))
