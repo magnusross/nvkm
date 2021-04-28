@@ -37,6 +37,6 @@ model = IOMOVarNVKM(
 #%%
 tp = [jnp.linspace(-2, 2, 30)]
 model.sample(tp, 10)
-# %timeit model.sample(tp, 10)
+%timeit model.sample(tp, 10)
 
 # %%
