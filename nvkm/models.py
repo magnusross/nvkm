@@ -14,7 +14,7 @@ from jax.experimental.host_callback import id_print
 from jax.ops import index, index_add
 from collections import OrderedDict
 
-from .integrals import fast_I
+from .integrals import map_fast_I, fast_I
 from .settings import JITTER
 from .utils import choleskyize, eq_kernel, l2p, map2matrix, vmap_scan
 from .vi import (
@@ -434,28 +434,23 @@ class MOVarNVKM:
                     lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
                 )(v_samps["gs"][i][j], thetagl, betagl, wgl)
                 # samps += jnp.zeros((len(t), N_s))
-                sampsi += vmap_scan(
-                    lambda ti: vmap(
-                        lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
-                            ti,
-                            G_gp_i.z,
-                            u_gp.z,
-                            thetags,
-                            betags,
-                            thetaus,
-                            betaus,
-                            wgs,
-                            qgs,
-                            wus,
-                            qus,
-                            ampgs[i][j],
-                            ampu,
-                            self.alpha[i],
-                            l2p(lsgs[i][j]),
-                            l2p(lsu),
-                        )
-                    )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul,),
+                sampsi += map_fast_I(
                     ts[i],
+                    G_gp_i.z,
+                    u_gp.z,
+                    thetagl,
+                    betagl,
+                    thetaul,
+                    betaul,
+                    wgl,
+                    qgl,
+                    wul,
+                    qul,
+                    ampgs[i][j],
+                    ampu,
+                    self.alpha[i],
+                    l2p(lsgs[i][j]),
+                    l2p(lsu),
                 )
             samps.append(sampsi)
         return samps
@@ -571,8 +566,13 @@ class MOVarNVKM:
         self.u_gp = self.set_u_gp(self.ampu, self.lsu)
 
     def save(self, f_name):
+        sd = {}
+        for k, v in self.__dict__.items():
+            if k not in ["q_of_v", "likelihood", "g_gps", "u_gps", "p_pars"]:
+                sd[k] = v
+
         with open(f_name, "wb") as file:
-            pickle.dump(self.__dict__, file)
+            pickle.dump(sd, file)
 
     def plot_samples(
         self, tu, tys, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(304)
@@ -769,25 +769,31 @@ class IOMOVarNVKM(MOVarNVKM):
         # id_print(like)
         return -(KL + like)
 
-    def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
+    def fit(
+        self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1),
+    ):
 
         u_data, y_data = self.data
         xu, yu = u_data
         xs, ys = y_data
 
+        std_fit = ["q_pars", "ampgs", "lsgs", "ampu", "lsu", "noise", "u_noise"]
+        std_argnums = list(range(1, 8))
         opt_init, opt_update, get_params = opt.adam(lr)
+        dpars_init = []
+        dpars_argnum = []
+        bound_arg = [0.0] * 7
+        for i, k in enumerate(std_fit):
+            if k not in dont_fit:
+                dpars_init.append(getattr(self, k))
+                dpars_argnum.append(std_argnums[i])
+            bound_arg[i] = getattr(self, k)
 
-        dpars = {
-            "q_pars": self.q_pars,
-            "ampgs": self.ampgs,
-            "lsgs": self.lsgs,
-            "ampu": self.ampu,
-            "lsu": self.lsu,
-            "noise": self.noise,
-            "u_noise": self.u_noise,
-        }
-
-        opt_state = opt_init(dpars)
+        grad_fn = jit(
+            value_and_grad(self._compute_bound, argnums=dpars_argnum),
+            static_argnums=(8,),
+        )
+        opt_state = opt_init(tuple(dpars_init))
 
         for i in range(its):
             skey, key = jrnd.split(key, 2)
@@ -813,39 +819,25 @@ class IOMOVarNVKM(MOVarNVKM):
                 x_bs = xs
                 y_bs = ys
 
-            value, grads = value_and_grad(
-                lambda dp: self._compute_bound(
-                    ((xu_bs, yu_bs), (x_bs, y_bs)),
-                    dp["q_pars"],
-                    dp["ampgs"],
-                    dp["lsgs"],
-                    dp["ampu"],
-                    dp["lsu"],
-                    dp["noise"],
-                    dp["u_noise"],
-                    N_s,
-                    skey,
-                )
-            )(dpars)
-            opt_state = opt_update(i, grads, opt_state)
-
-            for k in dpars.keys():
-                if k not in dont_fit:
-                    dpars[k] = get_params(opt_state)[k]
-
+            for k, ix in enumerate(dpars_argnum):
+                bound_arg[ix - 1] = get_params(opt_state)[k]
+            value, grads = grad_fn(
+                ((xu_bs, yu_bs), (x_bs, y_bs)), *bound_arg, N_s, skey,
+            )
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
-                return dpars
+                return get_params(opt_state)
 
-            elif i % 10 == 0:
-                # print(dpars["lsu"])
-                # print(dpars["lsgs"])
-                # print(dpars["ampu"])
-                # print(dpars["ampgs"])
+            if i % 10 == 0:
                 print(f"it: {i} F: {value} ")
 
-        for k in dpars.keys():
-            setattr(self, k, dpars[k])
+            opt_state = opt_update(i, grads, opt_state)
+
+        for i, ix in enumerate(dpars_argnum):
+            bound_arg[ix - 1] = get_params(opt_state)[i]
+
+        for i, k in enumerate(std_fit):
+            setattr(self, k, bound_arg[i])
 
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
@@ -882,3 +874,12 @@ class IOMOVarNVKM(MOVarNVKM):
         if save:
             plt.savefig(save)
         plt.show()
+
+
+# def load_model(f_name, model_class, q_class=MOIndependentGaussians):
+#     with open(f_name, "rb") as file:
+#         sd = pickle.load(file)
+#     args
+
+#     return model_class(q_class=q_class, **sd)
+

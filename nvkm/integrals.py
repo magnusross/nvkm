@@ -2,7 +2,7 @@ from jax import jit, vmap
 import jax.numpy as jnp
 from jax import lax
 from jax import config
-from .utils import map_reduce, map_reduce_1vec
+from .utils import map_reduce, map_reduce_1vec, vmap_scan
 import operator
 
 config.update("jax_enable_x64", True)
@@ -62,6 +62,7 @@ def slow_I1(
             onb += qus[n] * integ_1b(t, alpha, -1.0 * thetag[i], pu, zus[n])
         o1 *= opa + sigu ** 2 * opb
         o2 *= ona + sigu ** 2 * onb
+        print(o1, o2)
     out = 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
     return out
 
@@ -72,7 +73,7 @@ def fast_I1(
 ):
     # number of basis functions
 
-    fo = lambda thetag: vmap(
+    o = vmap(
         lambda thetgij: map_reduce(
             lambda wui, thetui, betaui: wui
             * integ_1a(t, alpha, thetgij, thetui, betaui),
@@ -86,9 +87,8 @@ def fast_I1(
         )
     )(thetag)
 
-    o1 = jnp.prod(fo(thetag))
-    o2 = jnp.prod(fo(-thetag))
-    return 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
+    o1 = jnp.prod(o)
+    return jnp.abs(o1) * jnp.cos(jnp.angle(o1) + betag)
 
 
 def slow_I2(t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
@@ -197,22 +197,60 @@ def fast_I(
     pu,
 ):
 
-    o1 = map_reduce_1vec(
+    o1 = vmap(
         lambda thetagi, betagi, wgi,: wgi
         * fast_I1(
             t, zus, thetagi, betagi, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
-        ),
-        thetags,
-        betags,
-        wgs,
-    )
+        )
+    )(thetags, betags, wgs,)
 
-    o2 = map_reduce_1vec(
+    o2 = vmap(
         lambda zgi, qgi: qgi
-        * fast_I2(t, zgi, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,),
-        zgs,
-        qgs,
-    )
+        * fast_I2(t, zgi, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,)
+    )(zgs, qgs,)
 
-    return o1 + o2
+    return jnp.sum(o1) + jnp.sum(o2)
+
+
+@jit
+def map_fast_I(
+    ts,
+    zgs,
+    zus,
+    thetagl,
+    betagl,
+    thetaul,
+    betaul,
+    wgl,
+    qgl,
+    wul,
+    qul,
+    ampg,
+    ampu,
+    alpha,
+    pg,
+    pu,
+):
+    return vmap(
+        lambda ti: vmap(
+            lambda thetags, betags, thetaus, betaus, wgs, qgs, wus, qus: fast_I(
+                ti,
+                zgs,
+                zus,
+                thetags,
+                betags,
+                thetaus,
+                betaus,
+                wgs,
+                qgs,
+                wus,
+                qus,
+                ampg,
+                ampu,
+                alpha,
+                pg,
+                pu,
+            )
+        )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
+    )(ts,)
 

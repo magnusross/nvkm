@@ -113,10 +113,10 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 
-modelc1.fit(args.Nits, args.lr, 30, 10, dont_fit=["noise", "u_noise"])
+modelc1.fit(args.Nits, args.lr, 30, 10, dont_fit=["lsu", "noise", "u_noise"])
 modelc1.save(args.f_name + "io_c1_model.pkl")
 
-modelc2.fit(args.Nits, args.lr, 30, 10, dont_fit=["noise", "u_noise"])
+modelc2.fit(args.Nits, args.lr, 30, 10, dont_fit=["lsu", "noise", "u_noise"])
 modelc2.save(args.f_name + "io_c2_model.pkl")
 #%%
 tp = jnp.linspace(-15, 15, 200)

@@ -164,6 +164,7 @@ def method(cls):
     return decorator
 
 
+@jit
 def choleskyize(A):
     return jnp.tril(A - 2 * jnp.diag(jnp.diag(A) * (jnp.diag(A) < 0.0)))
 
