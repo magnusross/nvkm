@@ -251,6 +251,6 @@ def map_fast_I(
                 pg,
                 pu,
             )
-        )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul),
-        ts,
-    )
+        )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
+    )(ts,)
+
