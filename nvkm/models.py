@@ -821,11 +821,9 @@ class IOMOVarNVKM(MOVarNVKM):
 
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
-
             value, grads = grad_fn(
                 ((xu_bs, yu_bs), (x_bs, y_bs)), *bound_arg, N_s, skey,
             )
-
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
                 return get_params(opt_state)
