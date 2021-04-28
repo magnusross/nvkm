@@ -566,8 +566,13 @@ class MOVarNVKM:
         self.u_gp = self.set_u_gp(self.ampu, self.lsu)
 
     def save(self, f_name):
+        sd = {}
+        for k, v in self.__dict__.items():
+            if k not in ["q_of_v", "likelihood", "g_gps", "u_gps", "p_pars"]:
+                sd[k] = v
+
         with open(f_name, "wb") as file:
-            pickle.dump(self.__dict__, file)
+            pickle.dump(sd, file)
 
     def plot_samples(
         self, tu, tys, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(304)
@@ -791,7 +796,6 @@ class IOMOVarNVKM(MOVarNVKM):
         opt_state = opt_init(tuple(dpars_init))
 
         for i in range(its):
-
             skey, key = jrnd.split(key, 2)
 
             if batch_size:
@@ -872,3 +876,12 @@ class IOMOVarNVKM(MOVarNVKM):
         if save:
             plt.savefig(save)
         plt.show()
+
+
+# def load_model(f_name, model_class, q_class=MOIndependentGaussians):
+#     with open(f_name, "rb") as file:
+#         sd = pickle.load(file)
+#     args
+
+#     return model_class(q_class=q_class, **sd)
+
