@@ -24,19 +24,20 @@ parser.add_argument("--Ns", default=20, type=int)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--fit_noise", default=0, type=int)
 parser.add_argument("--f_name", default="ncmogp", type=str)
+parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
 
 #%%
-data = pd.read_csv("data/water_tanks.csv")
+data = pd.read_csv(args.data_dir + "/water_tanks.csv")
 data = (data - data.mean()) / data.std()
 # %%
 noise = 0.05
 udata = (jnp.array(data["Ts"]), jnp.array(data["uEst"]))
 ydata = ([jnp.array(data["Ts"])], [jnp.array(data["yEst"])])
 
-zu = jnp.linspace(-1.75, 1.75, 120).reshape(-1, 1)
+zu = jnp.linspace(-1.75, 1.75, 110).reshape(-1, 1)
 tg = jnp.linspace(-0.2, 0.2, 10)
-tf = jnp.linspace(-0.2, 0.2, 7)
+tf = jnp.linspace(-0.2, 0.2, 6)
 tm2 = jnp.meshgrid(tf, tf)
 t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 

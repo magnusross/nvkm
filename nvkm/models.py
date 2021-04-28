@@ -791,7 +791,7 @@ class IOMOVarNVKM(MOVarNVKM):
         opt_state = opt_init(tuple(dpars_init))
 
         for i in range(its):
-            print(i)
+
             skey, key = jrnd.split(key, 2)
 
             if batch_size:
