@@ -9,14 +9,13 @@ import jax.random as jrnd
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from wbml.data.eeg import load
 from nvkm.models import MOVarNVKM
 from nvkm.utils import l2p
 
 parser = argparse.ArgumentParser(description="EEG MO experiment.")
 parser.add_argument("--Nvu", default=10, type=int)
 parser.add_argument("--Nvgs", default=[15, 7, 4], nargs="+", type=int)
-parser.add_argument("--zgranges", default=[0.3, 0.3, 0.15], nargs="+", type=float)
+parser.add_argument("--zgrange", default=[0.3, 0.3, 0.15], nargs="+", type=float)
 parser.add_argument("--Nits", default=1000, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
@@ -36,7 +35,7 @@ noise = args.noise
 Nits = args.Nits
 Nvu = args.Nvu
 Nvgs = args.Nvgs
-zran = args.zranges
+zran = args.zgrange
 Ns = args.Ns
 lr = args.lr
 q_frac = args.q_frac
@@ -44,22 +43,23 @@ f_name = args.f_name
 data_dir = args.data_dir
 lsu = args.lsu
 ampu = args.ampu
+print(args)
 # Nbatch = 5
 # Nbasis = 30
 # noise = 0.05
 # Nits = 500
-# Nvu = 50
+# Nvu = 60
 # Nvg1 = 15
 # Nvg2 = 6
 # Ns = 5
 # lr = 5e-4
-# q_frac = 0.2
+# q_frac = 0.8
 # f_name = "eegdev"
 # data_dir = "data"
 # lsu = 0.02
-# ampu = 10.0
+# ampu = 1.0
 # Nvgs = [15]
-# zran = [0.03]
+# zran = [0.2]
 #%%
 
 train_df = pd.read_csv(data_dir + "/eeg/eeg_train.csv")
@@ -71,7 +71,7 @@ def make_data(df):
     ys = []
     o_names = []
     y_stds = []
-    x = jnp.array(df["time"])
+    x = jnp.array(df["time"] - df["time"].mean()) / df["time"].std()
     for key in df.keys():
         if key != "time":
             o_names.append(key)
@@ -98,14 +98,14 @@ for i in range(C):
 # %%
 model = MOVarNVKM(
     [tgs] * O,
-    jnp.linspace(-0.1, 1.1, Nvu).reshape(-1, 1),
+    jnp.linspace(-1.8, 1.8, Nvu).reshape(-1, 1),
     train_data,
     q_pars_init=None,
     q_initializer_pars=q_frac,
-    lsgs=[[0.008] * C] * O,
-    ampgs=[[4.0] * C] * O,
+    lsgs=[[0.04] * C] * O,
+    ampgs=[[7.0] * C] * O,
     noise=[noise] * O,
-    alpha=[l2p(0.012)] * O,
+    alpha=[l2p(0.1)] * O,
     lsu=lsu,
     ampu=ampu,
     N_basis=Nbasis,
@@ -121,12 +121,12 @@ print(model.ampgs)
 print(model.lsgs)
 # %%
 model.plot_samples(
-    jnp.linspace(-0.1, 1.1, 300),
-    [jnp.linspace(-0.0, 1.1, 300)] * O,
+    jnp.linspace(-1.8, 1.8, 300),
+    [jnp.linspace(-1.8, 1.8, 300)] * O,
     Ns,
     save=f_name + "fit_samples.pdf",
 )
-model.plot_filters(jnp.linspace(0.04, -0.04, 60), 10, save=f_name + "fit_filters.pdf")
+model.plot_filters(jnp.linspace(0.3, -0.3, 60), 10, save=f_name + "fit_filters.pdf")
 #%%
 tt = jnp.array(test_df.index)
 preds = model.sample([tt] * O, 50)
