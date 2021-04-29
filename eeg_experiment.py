@@ -15,13 +15,15 @@ from nvkm.utils import l2p
 
 parser = argparse.ArgumentParser(description="EEG MO experiment.")
 parser.add_argument("--Nvu", default=10, type=int)
-parser.add_argument("--Nvg1", default=2, type=int)
-parser.add_argument("--Nvg2", default=2, type=int)
+parser.add_argument("--Nvgs", default=[15, 7, 4], nargs="+", type=int)
+parser.add_argument("--zgranges", default=[0.3, 0.3, 0.15], nargs="+", type=float)
 parser.add_argument("--Nits", default=1000, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
 parser.add_argument("--Nbasis", default=100, type=int)
 parser.add_argument("--Ns", default=20, type=int)
+parser.add_argument("--lsu", default=1.0, type=float)
+parser.add_argument("--ampu", default=1.0, type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.003, type=float)
 parser.add_argument("--f_name", default="ncmogp", type=str)
@@ -33,18 +35,20 @@ Nbasis = args.Nbasis
 noise = args.noise
 Nits = args.Nits
 Nvu = args.Nvu
-Nvg1 = args.Nvg1
-Nvg2 = args.Nvg2
+Nvgs = args.Nvgs
+zran = args.zranges
 Ns = args.Ns
 lr = args.lr
 q_frac = args.q_frac
 f_name = args.f_name
 data_dir = args.data_dir
+lsu = args.lsu
+ampu = args.ampu
 # Nbatch = 5
 # Nbasis = 30
-# noise = 0.1
+# noise = 0.05
 # Nits = 500
-# Nvu = 100
+# Nvu = 50
 # Nvg1 = 15
 # Nvg2 = 6
 # Ns = 5
@@ -52,6 +56,10 @@ data_dir = args.data_dir
 # q_frac = 0.2
 # f_name = "eegdev"
 # data_dir = "data"
+# lsu = 0.02
+# ampu = 10.0
+# Nvgs = [15]
+# zran = [0.03]
 #%%
 
 train_df = pd.read_csv(data_dir + "/eeg/eeg_train.csv")
@@ -79,25 +87,27 @@ train_data, o_names, y_stds = make_data(train_df)
 # %%
 
 O = 7
+C = len(Nvgs)
 
-t1 = jnp.linspace(0.03, -0.03, Nvg1).reshape(-1, 1)
-tf = jnp.linspace(0.03, -0.03, Nvg2)
-tm2 = jnp.meshgrid(tf, tf)
-t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
+tgs = []
+for i in range(C):
+    tg = jnp.linspace(-zran[i], zran[i], Nvgs[i])
+    tm2 = jnp.meshgrid(*[tg] * (i + 1))
+    tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
 # %%
 model = MOVarNVKM(
-    [[t1, t2]] * O,
+    [tgs] * O,
     jnp.linspace(-0.1, 1.1, Nvu).reshape(-1, 1),
     train_data,
     q_pars_init=None,
     q_initializer_pars=q_frac,
-    lsgs=[[0.008, 0.008]] * O,
-    ampgs=[[4.0, 4.0]] * O,
+    lsgs=[[0.008] * C] * O,
+    ampgs=[[4.0] * C] * O,
     noise=[noise] * O,
     alpha=[l2p(0.012)] * O,
-    lsu=0.02,
-    ampu=10.0,
+    lsu=lsu,
+    ampu=ampu,
     N_basis=Nbasis,
 )
 

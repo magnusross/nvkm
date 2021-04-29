@@ -12,10 +12,8 @@ import pandas as pd
 import argparse
 
 parser = argparse.ArgumentParser(description="Water tank experiment")
-# parser.add_argument("--Nvu", default=10, type=int)
-# parser.add_argument("--Nvg", default=2, type=int)
-# parser.add_argument("--zgrange", default=0.1, type=float)
-# parser.add_argument("--alpha", default=15.0, type=float)
+parser.add_argument("--Nvgs", default=[15, 7, 4], nargs="+", type=int)
+parser.add_argument("--zgranges", default=[0.3, 0.3, 0.15], nargs="+", type=float)
 parser.add_argument("--Nits", default=1000, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--noise", default=0.05, type=float)
@@ -27,18 +25,23 @@ parser.add_argument("--Nbatch", default=30, type=int)
 parser.add_argument("--f_name", default="ncmogp", type=str)
 parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
+
 # data_dir = "data"
 # Nits = 100
 # Nbatch = 30
-# lr = 5e-3
+# lr = 1e-3
 # f_name = "dev"
-
+# Nvgs = [15, 7, 4]
+# zran = [0.3, 0.3, 0.15]
+# noise = 0.05
 data_dir = args.data_dir
 Nits = args.Nits
 Nbatch = args.Nbatch
 lr = args.lr
 f_name = args.f_name
 noise = args.noise
+Nvgs = args.Nvgs
+zran = args.zgrange
 
 
 #%%
@@ -72,25 +75,28 @@ ytest = (
 
 udata = (jnp.hstack((utrain[0], utest[0])), jnp.hstack((utrain[1], utest[1])))
 
+C = len(Nvgs)
+
 zu = jnp.hstack(
     (jnp.linspace(-2.0, 2.0, 150), t_offset + jnp.linspace(-2.0, 2.0, 150))
 ).reshape(-1, 1)
+tgs = []
+for i in range(C):
+    tg = jnp.linspace(-zran[i], zran[i], Nvgs[i])
+    tm2 = jnp.meshgrid(*[tg] * (i + 1))
+    tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
-tg = jnp.linspace(-0.3, 0.3, 10)
-tf = jnp.linspace(-0.3, 0.3, 6)
-tm2 = jnp.meshgrid(tf, tf)
-t2 = jnp.vstack((tm2[0].flatten(), tm2[1].flatten())).T
 
 # %%
 modelc2 = IOMOVarNVKM(
-    [[tg, t2]],
+    [tgs],
     zu,
     udata,
     ytrain,
     q_pars_init=None,
     q_initializer_pars=0.4,
-    lsgs=[[0.05, 0.06]],
-    ampgs=[[7.0, 7.0]],
+    lsgs=[[0.05] * C],
+    ampgs=[[7.0] * C],
     alpha=[l2p(0.1)],
     lsu=0.03,
     ampu=1.0,
@@ -141,7 +147,7 @@ plt.fill_between(
 )
 plt.text(0, 12, "$e_{RMS}$ = %.2f" % rmse)
 plt.xlabel("time (s)")
-plt.ylabel("ouput (V)")
+plt.ylabel("output (V)")
 plt.legend()
 plt.savefig(f_name + "main.pdf")
 plt.show()
