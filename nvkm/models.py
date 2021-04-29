@@ -506,16 +506,23 @@ class MOVarNVKM:
 
         opt_init, opt_update, get_params = opt.adam(lr)
 
-        dpars = {
-            "q_pars": self.q_pars,
-            "ampgs": self.ampgs,
-            "lsgs": self.lsgs,
-            "ampu": self.ampu,
-            "lsu": self.lsu,
-            "noise": self.noise,
-        }
+        std_fit = ["q_pars", "ampgs", "lsgs", "ampu", "lsu", "noise"]
+        std_argnums = list(range(1, 7))
+        dpars_init = []
+        dpars_argnum = []
+        bound_arg = [0.0] * 6
+        for i, k in enumerate(std_fit):
+            if k not in dont_fit:
+                dpars_init.append(getattr(self, k))
+                dpars_argnum.append(std_argnums[i])
+            bound_arg[i] = getattr(self, k)
 
-        opt_state = opt_init(dpars)
+        grad_fn = jit(
+            value_and_grad(self._compute_bound, argnums=dpars_argnum),
+            static_argnums=(7,),
+        )
+
+        opt_state = opt_init(tuple(dpars_init))
 
         for i in range(its):
             skey, key = jrnd.split(key, 2)
@@ -532,34 +539,24 @@ class MOVarNVKM:
                     y_bs.append(ys[j])
                     x_bs.append(xs[j])
 
-            value, grads = value_and_grad(
-                lambda dp: self._compute_bound(
-                    (x_bs, y_bs),
-                    dp["q_pars"],
-                    dp["ampgs"],
-                    dp["lsgs"],
-                    dp["ampu"],
-                    dp["lsu"],
-                    dp["noise"],
-                    N_s,
-                    skey,
-                )
-            )(dpars)
-            opt_state = opt_update(i, grads, opt_state)
-
-            for k in dpars.keys():
-                if k not in dont_fit:
-                    dpars[k] = get_params(opt_state)[k]
+            for k, ix in enumerate(dpars_argnum):
+                bound_arg[ix - 1] = get_params(opt_state)[k]
+            value, grads = grad_fn((x_bs, y_bs), *bound_arg, N_s, skey,)
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
-                return dpars
+                return get_params(opt_state)
 
-            elif i % 10 == 0:
+            if i % 10 == 0:
                 print(f"it: {i} F: {value} ")
 
-        for k in dpars.keys():
-            setattr(self, k, dpars[k])
+            opt_state = opt_update(i, grads, opt_state)
+
+        for i, ix in enumerate(dpars_argnum):
+            bound_arg[ix - 1] = get_params(opt_state)[i]
+
+        for i, k in enumerate(std_fit):
+            setattr(self, k, bound_arg[i])
 
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
@@ -633,10 +630,10 @@ class MOVarNVKM:
             for i in range(self.O):
                 for j in range(self.C[i]):
                     y = g_samps[i][j].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
-                    axs[j][i].plot(tf, y.T, c="red", alpha=0.5)
-                    axs[j][i].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
+                    axs[i][j].plot(tf, y.T, c="red", alpha=0.5)
+                    axs[i][j].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
                 for k in range(self.C[i], max(self.C)):
-                    axs[k][i].axis("off")
+                    axs[i][k].axis("off")
 
         plt.tight_layout()
 
