@@ -11,31 +11,71 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import argparse
 
-parser = argparse.ArgumentParser(description="Compare CPU and GPU times.")
-parser.add_argument("--Nvu", default=10, type=int)
-parser.add_argument("--Nvg", default=2, type=int)
-parser.add_argument("--zgrange", default=0.1, type=float)
-parser.add_argument("--alpha", default=15.0, type=float)
+parser = argparse.ArgumentParser(description="Water tank experiment")
+# parser.add_argument("--Nvu", default=10, type=int)
+# parser.add_argument("--Nvg", default=2, type=int)
+# parser.add_argument("--zgrange", default=0.1, type=float)
+# parser.add_argument("--alpha", default=15.0, type=float)
 parser.add_argument("--Nits", default=1000, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
+parser.add_argument("--noise", default=0.05, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
-parser.add_argument("--Nbasis", default=100, type=int)
-parser.add_argument("--Ns", default=20, type=int)
-parser.add_argument("--q_frac", default=0.5, type=float)
-parser.add_argument("--fit_noise", default=0, type=int)
+# parser.add_argument("--Nbasis", default=100, type=int)
+# parser.add_argument("--Ns", default=20, type=int)
+# parser.add_argument("--q_frac", default=0.5, type=float)
+# parser.add_argument("--fit_noise", default=0, type=int)
 parser.add_argument("--f_name", default="ncmogp", type=str)
 parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
+# data_dir = "data"
+# Nits = 100
+# Nbatch = 30
+# lr = 5e-3
+# f_name = "dev"
+
+data_dir = args.data_dir
+Nits = args.Nits
+Nbatch = args.Nbatch
+lr = args.lr
+f_name = args.f_name
+noise = args.noise
+
 
 #%%
-data = pd.read_csv(args.data_dir + "/water_tanks.csv")
-data = (data - data.mean()) / data.std()
+data = pd.read_csv(data_dir + "/water_tanks.csv")
+y_mean, y_std = data["yEst"].mean(), data["yEst"].std()
+u_mean, u_std = data["uEst"].mean(), data["uEst"].std()
+t_mean, t_std = data["Ts"].mean(), data["Ts"].std()
 # %%
-noise = 0.05
-udata = (jnp.array(data["Ts"]), jnp.array(data["uEst"]))
-ydata = ([jnp.array(data["Ts"])], [jnp.array(data["yEst"])])
 
-zu = jnp.linspace(-1.75, 1.75, 140).reshape(-1, 1)
+tt = jnp.array((data["Ts"] - t_mean) / t_std)
+utrain = (tt, jnp.array((data["uEst"] - u_mean) / u_std))
+ytrain = ([tt], [jnp.array((data["yEst"] - y_mean) / y_std)])
+
+t_offset = 20.0
+utest = (
+    tt + t_offset * jnp.ones(len(data)),
+    jnp.array((data["uVal"] - u_mean) / u_std),
+)
+ytest = (
+    [tt + t_offset * jnp.ones(len(data))],
+    [jnp.array((data["yVal"] - y_mean) / y_std)],
+)
+
+# plt.plot(*utrain)
+# plt.plot(ytrain[0][0], ytrain[1][0])
+# plt.show()
+# plt.plot(*utest)
+# plt.plot(ytest[0][0], ytest[1][0])
+# plt.show()
+
+
+udata = (jnp.hstack((utrain[0], utest[0])), jnp.hstack((utrain[1], utest[1])))
+
+zu = jnp.hstack(
+    (jnp.linspace(-2.0, 2.0, 150), t_offset + jnp.linspace(-2.0, 2.0, 150))
+).reshape(-1, 1)
+
 tg = jnp.linspace(-0.3, 0.3, 10)
 tf = jnp.linspace(-0.3, 0.3, 6)
 tm2 = jnp.meshgrid(tf, tf)
@@ -46,7 +86,7 @@ modelc2 = IOMOVarNVKM(
     [[tg, t2]],
     zu,
     udata,
-    ydata,
+    ytrain,
     q_pars_init=None,
     q_initializer_pars=0.4,
     lsgs=[[0.05, 0.06]],
@@ -60,13 +100,52 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 # 5e-4
-modelc2.fit(args.Nits, args.lr, args.Nbatch, 15, dont_fit=["lsu", "noise", "u_noise"])
-modelc2.save(args.f_name + "tank_model.pkl")
+modelc2.fit(Nits, lr, Nbatch, 15, dont_fit=["lsu", "noise", "u_noise"])
+modelc2.save(f_name + "tank_model.pkl")
 # %%
-tp = jnp.linspace(-2, 2, 400)
-axs = modelc2.plot_samples(
-    tp, [tp], 10, return_axs=False, save=args.f_name + "samps.pdf"
+tp_train = jnp.linspace(-2, 2, 400)
+tp_test = tp_train + t_offset
+axs = modelc2.plot_samples(tp_train, [tp_train], 10, return_axs=True,)
+axs[0].set_xlim([-2, 2])
+axs[1].set_xlim([-2, 2])
+plt.savefig(f_name + "samps_train.pdf")
+#%%
+axs = modelc2.plot_samples(tp_test, [tp_test], 10, return_axs=True)
+axs[0].set_xlim([18, 22])
+axs[1].set_xlim([18, 22])
+axs[1].plot(ytest[0][0], ytest[1][0], c="black", ls=":")
+plt.savefig(f_name + "samps_test.pdf")
+# axs[1].xrange(18, 22)
+#%%
+p_samps = modelc2.sample(ytest[0], 50)
+#%%
+scaled_samps = p_samps[0] * y_std + y_mean
+pred_mean = jnp.mean(scaled_samps, axis=1)
+pred_std = jnp.std(scaled_samps, axis=1)
+
+rmse = jnp.sqrt(
+    (1 / len(data["yVal"])) * jnp.sum((pred_mean - jnp.array(data["yVal"])) ** 2)
 )
+print(rmse)
+
+fig = plt.figure(figsize=(12, 4))
+plt.plot(data["Ts"], data["yVal"], c="black", ls=":", label="Val. Data")
+plt.plot(data["Ts"], pred_mean, c="green", label="Pred. Mean")
+plt.fill_between(
+    data["Ts"],
+    pred_mean + 2 * pred_std,
+    pred_mean - 2 * pred_std,
+    alpha=0.1,
+    color="green",
+    label="$\pm 2 \sigma$",
+)
+plt.text(0, 12, "$e_{RMS}$ = %.2f" % rmse)
+plt.xlabel("time (s)")
+plt.ylabel("ouput (V)")
+plt.legend()
+plt.savefig(f_name + "main.pdf")
+plt.show()
+#%%
 tf = jnp.linspace(-0.25, 0.25, 100)
-modelc2.plot_filters(tf, 10, save=args.f_name + "filts.pdf")
+modelc2.plot_filters(tf, 10, save=f_name + "filts.pdf")
 # %%
