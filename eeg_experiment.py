@@ -13,19 +13,19 @@ from nvkm.models import MOVarNVKM
 from nvkm.utils import l2p
 
 parser = argparse.ArgumentParser(description="EEG MO experiment.")
-parser.add_argument("--Nvu", default=10, type=int)
-parser.add_argument("--Nvgs", default=[15, 7, 4], nargs="+", type=int)
-parser.add_argument("--zgrange", default=[0.3, 0.3, 0.15], nargs="+", type=float)
+parser.add_argument("--Nvu", default=60, type=int)
+parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
+parser.add_argument("--zgrange", default=[0.25], nargs="+", type=float)
+parser.add_argument("--zurange", default=1.8, type=float)
 parser.add_argument("--Nits", default=1000, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
-parser.add_argument("--Nbasis", default=100, type=int)
+parser.add_argument("--Nbasis", default=30, type=int)
 parser.add_argument("--Ns", default=20, type=int)
-parser.add_argument("--lsu", default=1.0, type=float)
-parser.add_argument("--ampu", default=1.0, type=float)
+parser.add_argument("--ampgs", default=1.0, type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
-parser.add_argument("--noise", default=0.003, type=float)
-parser.add_argument("--f_name", default="ncmogp", type=str)
+parser.add_argument("--noise", default=0.1, type=float)
+parser.add_argument("--f_name", default="eeg", type=str)
 parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
 
@@ -35,31 +35,28 @@ noise = args.noise
 Nits = args.Nits
 Nvu = args.Nvu
 Nvgs = args.Nvgs
-zran = args.zgrange
+zgran = args.zgrange
+zuran = args.zurange
 Ns = args.Ns
 lr = args.lr
 q_frac = args.q_frac
 f_name = args.f_name
 data_dir = args.data_dir
-lsu = args.lsu
-ampu = args.ampu
+ampgs = args.ampgs
 print(args)
 # Nbatch = 5
 # Nbasis = 30
 # noise = 0.05
 # Nits = 500
 # Nvu = 60
-# Nvg1 = 15
-# Nvg2 = 6
 # Ns = 5
 # lr = 5e-4
 # q_frac = 0.8
 # f_name = "eegdev"
 # data_dir = "data"
-# lsu = 0.02
-# ampu = 1.0
 # Nvgs = [15]
-# zran = [0.2]
+# zgran = [0.2]
+# zuran = 1.8
 #%%
 
 train_df = pd.read_csv(data_dir + "/eeg/eeg_train.csv")
@@ -89,25 +86,30 @@ train_data, o_names, y_stds = make_data(train_df)
 O = 7
 C = len(Nvgs)
 
+zu = jnp.linspace(-zuran, zuran, Nvu).reshape(-1, 1)
+lsu = zu[1][0] - zu[0][0]
 tgs = []
+lsgs = []
 for i in range(C):
-    tg = jnp.linspace(-zran[i], zran[i], Nvgs[i])
+    lsgs.append(tg[1] - tg[0])
+    tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
     tm2 = jnp.meshgrid(*[tg] * (i + 1))
     tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
+
 
 # %%
 model = MOVarNVKM(
     [tgs] * O,
-    jnp.linspace(-1.8, 1.8, Nvu).reshape(-1, 1),
+    zu,
     train_data,
     q_pars_init=None,
     q_initializer_pars=q_frac,
-    lsgs=[[0.04] * C] * O,
-    ampgs=[[7.0] * C] * O,
+    lsgs=[lsgs] * O,
+    ampgs=[ampgs * C] * O,
     noise=[noise] * O,
-    alpha=[l2p(0.1)] * O,
+    alpha=[3 / (max(zgran) ** 2)] * O,
     lsu=lsu,
-    ampu=ampu,
+    ampu=1.0,
     N_basis=Nbasis,
 )
 
@@ -121,12 +123,12 @@ print(model.ampgs)
 print(model.lsgs)
 # %%
 model.plot_samples(
-    jnp.linspace(-1.8, 1.8, 300),
-    [jnp.linspace(-1.8, 1.8, 300)] * O,
+    jnp.linspace(-zuran, zuran, 300),
+    [jnp.linspace(-zuran, zuran, 300)] * O,
     Ns,
     save=f_name + "fit_samples.pdf",
 )
-model.plot_filters(jnp.linspace(0.3, -0.3, 60), 10, save=f_name + "fit_filters.pdf")
+model.plot_filters(jnp.linspace(-zgran, zgran, 60), 10, save=f_name + "fit_filters.pdf")
 #%%
 tt = jnp.array(test_df.index)
 preds = model.sample([tt] * O, 50)
