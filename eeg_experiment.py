@@ -91,8 +91,8 @@ lsu = zu[1][0] - zu[0][0]
 tgs = []
 lsgs = []
 for i in range(C):
-    lsgs.append(tg[1] - tg[0])
     tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
+    lsgs.append(tg[1] - tg[0])
     tm2 = jnp.meshgrid(*[tg] * (i + 1))
     tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
@@ -105,7 +105,7 @@ model = MOVarNVKM(
     q_pars_init=None,
     q_initializer_pars=q_frac,
     lsgs=[lsgs] * O,
-    ampgs=[ampgs * C] * O,
+    ampgs=[[ampgs] * C] * O,
     noise=[noise] * O,
     alpha=[3 / (max(zgran) ** 2)] * O,
     lsu=lsu,
@@ -115,7 +115,7 @@ model = MOVarNVKM(
 
 #%%
 
-model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise"])
+model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -128,7 +128,9 @@ model.plot_samples(
     Ns,
     save=f_name + "fit_samples.pdf",
 )
-model.plot_filters(jnp.linspace(-zgran, zgran, 60), 10, save=f_name + "fit_filters.pdf")
+model.plot_filters(
+    jnp.linspace(-max(zgran), max(zgran), 60), 10, save=f_name + "fit_filters.pdf"
+)
 #%%
 tt = jnp.array(test_df.index)
 preds = model.sample([tt] * O, 50)

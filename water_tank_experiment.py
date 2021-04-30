@@ -128,6 +128,11 @@ modelc2 = IOMOVarNVKM(
 #%%
 # 5e-4
 modelc2.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"])
+print(modelc2.noise)
+print(modelc2.ampu)
+print(modelc2.lsu)
+print(modelc2.ampgs)
+print(modelc2.lsgs)
 modelc2.save(f_name + "tank_model.pkl")
 # %%
 tp_train = jnp.linspace(-zuran, zuran, 400)

@@ -129,6 +129,11 @@ def RMSE(yp, ye):
 
 
 @jit
+def NMSE(yp, ytrue):
+    return jnp.mean((yp - ytrue) ** 2) / jnp.mean((jnp.mean(ytrue) - ytrue) ** 2)
+
+
+@jit
 def eq_kernel(
     t: Union[jnp.DeviceArray, float],
     tp: Union[jnp.DeviceArray, float],
@@ -275,6 +280,17 @@ def generate_EQ_data(N=880, key=jax.random.PRNGKey(34)):
         t,
         y,
     )
+
+
+def make_zg_grids(zgran: list, Nvgs: list):
+    tgs = []
+    lsgs = []
+    for i in range(len(Nvgs)):
+        tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
+        lsgs.append(tg[1] - tg[0])
+        tm2 = jnp.meshgrid(*[tg] * (i + 1))
+        tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
+    return tgs, lsgs
 
 
 # def load_ncmogp_data(
