@@ -21,7 +21,7 @@ parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
 parser.add_argument("--Nbasis", default=30, type=int)
 parser.add_argument("--Ns", default=15, type=int)
-parser.add_argument("--ampgs", default=14.0, type=float)
+parser.add_argument("--ampgs", default=[2, 30, 30], nargs="+", type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.05, type=float)
 parser.add_argument("--f_name", default="tank", type=str)
@@ -45,18 +45,18 @@ data_dir = args.data_dir
 ampgs = args.ampgs
 print(args)
 # data_dir = "data"
-# Nits = 100
+# Nits = 1000
 # Nbatch = 30
 # lr = 1e-3
-# q_frac = 0.00001
+# q_frac = 0.
 # f_name = "dev"
-# Nvgs = [50, 10, 8]
-# zgran = [0.5, 0.5, 0.5]
+# Nvgs = [25, 15]
+# zgran = [0.5, 0.25]
+# ampgs = [1.0, 50.0]
 # zuran = -2.0
 # noise = 0.05
-# ampgs = 12.0
 # Nbasis = 30
-# Ns = 15
+# Ns = 5
 
 
 # print(args)
@@ -107,7 +107,7 @@ for i in range(C):
     tm2 = jnp.meshgrid(*[tg] * (i + 1))
     tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
-
+print([len(l) for l in [tgs]])
 # %%
 modelc2 = IOMOVarNVKM(
     [tgs],
@@ -117,8 +117,8 @@ modelc2 = IOMOVarNVKM(
     q_pars_init=None,
     q_initializer_pars=q_frac,
     lsgs=[lsgs],
-    ampgs=[[ampgs] * C],
-    alpha=[3 / (max(zgran) ** 2)],
+    ampgs=[ampgs],
+    alpha=[[3 / (zgran[i]) ** 2 for i in range(C)]],
     lsu=lsu,
     ampu=1.0,
     N_basis=Nbasis,
@@ -127,7 +127,7 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 # 5e-4
-modelc2.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"])
+modelc2.fit(500, 5e-3, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"])
 print(modelc2.noise)
 print(modelc2.ampu)
 print(modelc2.lsu)

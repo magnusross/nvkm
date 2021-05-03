@@ -24,7 +24,7 @@ parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
 parser.add_argument("--Nbasis", default=30, type=int)
 parser.add_argument("--Ns", default=20, type=int)
-parser.add_argument("--ampgs", default=1.0, type=float)
+parser.add_argument("--ampgs", default=[5], nargs="+", type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.1, type=float)
 parser.add_argument("--f_name", default="eeg", type=str)
@@ -47,20 +47,20 @@ data_dir = args.data_dir
 ampgs = args.ampgs
 print(args)
 
-Nbatch = 50
-Nbasis = 30
-noise = 0.05
-Nits = 500
-Nvu = 140
-Ns = 5
-lr = 1e-2
-q_frac = 0.6
-f_name = "eegdev"
-data_dir = "data"
-Nvgs = [15]
-zgran = [0.5]
-zuran = 2.8
-ampgs = 5.0
+# Nbatch = 50
+# Nbasis = 30
+# noise = 0.05
+# Nits = 500
+# Nvu = 140
+# Ns = 5
+# lr = 1e-2
+# q_frac = 0.6
+# f_name = "eegdev"
+# data_dir = "data"
+# Nvgs = [15, 8]
+# zgran = [0.5, 0.4]
+# zuran = 2.8
+# ampgs = 5.0
 
 
 data = loadmat(data_dir + "/weatherdata.mat")
@@ -145,7 +145,7 @@ model = MOVarNVKM(
     N_basis=Nbasis,
 )
 #%%
-model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
+model.fit(3000, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -162,6 +162,7 @@ axs = model.plot_samples(
 )
 axs[2].scatter(s_testx1, s_testy1, c="red", alpha=0.3)
 axs[3].scatter(s_testx2, s_testy2, c="red", alpha=0.3)
+plt.savefig(f_name + "fit_samples.pdf")
 plt.show()
 #%%
 model.plot_filters(

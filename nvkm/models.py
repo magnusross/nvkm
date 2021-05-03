@@ -168,7 +168,7 @@ class NVKM:
         N_basis: int = 500,
         C: int = 1,
         noise: float = 0.5,
-        alpha: float = 1.0,
+        alpha: List[float] = [1.0],
         lsgs: List[float] = [1.0],
         ampgs: List[float] = [1.0],
         lsu: float = 1.0,
@@ -260,7 +260,7 @@ class NVKM:
                         qus,
                         ampgs[i],
                         ampu,
-                        self.alpha,
+                        self.alpha[i],
                         l2p(lsgs[i]),
                         l2p(lsu),
                     )
@@ -309,7 +309,7 @@ class MOVarNVKM:
         N_basis: int = 500,
         ampgs: List[List[float]] = [[1.0], [1.0]],
         noise: List[float] = [1.0, 1.0],
-        alpha: List[float] = [1.0, 1.0],
+        alpha: List[List[float]] = [[1.0], [1.0]],
         lsgs: List[List[float]] = [[1.0], [1.0]],
         lsu: float = 1.0,
         ampu: float = 1.0,
@@ -421,7 +421,7 @@ class MOVarNVKM:
         samps = []
         for i in range(self.O):
             sampsi = jnp.zeros((len(ts[i]), N_s))
-            for j in range(self.C[i]):
+            for j in range(0, self.C[i]):
 
                 G_gp_i = self.g_gps[i][j]
 
@@ -448,10 +448,11 @@ class MOVarNVKM:
                     qul,
                     ampgs[i][j],
                     ampu,
-                    self.alpha[i],
+                    self.alpha[i][j],
                     l2p(lsgs[i][j]),
                     l2p(lsu),
                 )
+                # id_print(sampsi)
             samps.append(sampsi)
         return samps
 
@@ -610,26 +611,26 @@ class MOVarNVKM:
             ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
-            y = g_samps[0][0].T * jnp.exp(-self.alpha[0] * (tf) ** 2)
+            y = g_samps[0][0].T * jnp.exp(-self.alpha[0][0] * (tf) ** 2)
             axs.plot(tf, y.T, c="red", alpha=0.5)
             axs.set_title("$G_{%s, %s}$" % (1, 1))
 
         elif max(self.C) == 1:
             for i in range(self.O):
-                y = g_samps[i][0].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+                y = g_samps[i][0].T * jnp.exp(-self.alpha[i][0] * (tf) ** 2)
                 axs[i].plot(tf, y.T, c="red", alpha=0.5)
                 axs[i].set_title("$G_{%s, %s}$" % (i + 1, 1))
 
         elif self.O == 1:
             for j in range(self.C[0]):
-                y = g_samps[0][j].T * jnp.exp(-self.alpha[0] * (tf) ** 2)
+                y = g_samps[0][j].T * jnp.exp(-self.alpha[0][j] * (tf) ** 2)
                 axs[j].plot(tf, y.T, c="red", alpha=0.5)
                 axs[j].set_title("$G_{%s, %s}$" % (1, j + 1))
 
         else:
             for i in range(self.O):
                 for j in range(self.C[i]):
-                    y = g_samps[i][j].T * jnp.exp(-self.alpha[i] * (tf) ** 2)
+                    y = g_samps[i][j].T * jnp.exp(-self.alpha[i][j] * (tf) ** 2)
                     axs[i][j].plot(tf, y.T, c="red", alpha=0.5)
                     axs[i][j].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
                 for k in range(self.C[i], max(self.C)):
@@ -654,7 +655,7 @@ class VariationalNVKM(MOVarNVKM):
         ampgs: List[float] = [1.0],
         lsgs: List[float] = [1.0],
         noise: float = 0.5,
-        alpha: float = 1.0,
+        alpha: List[float] = [1.0],
         q_pars_init: Union[VIPars, None] = None,
         **kwargs,
     ):
@@ -699,7 +700,7 @@ class VariationalNVKM(MOVarNVKM):
                 ax = axs
             else:
                 ax = axs[i]
-            y = g_samps[i].T * jnp.exp(-self.alpha[0] * (t) ** 2)
+            y = g_samps[i].T * jnp.exp(-self.alpha[0][i] * (t) ** 2)
             ax.plot(t, y.T, c="red", alpha=0.5)
             ax.set_title(f"$G_{i}$")
 
