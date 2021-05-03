@@ -48,9 +48,9 @@ print(args)
 # Nits = 100
 # Nbatch = 30
 # lr = 1e-3
-# q_frac = 0.8
+# q_frac = 0.00001
 # f_name = "dev"
-# Nvgs = [15, 7, 8]
+# Nvgs = [50, 10, 8]
 # zgran = [0.5, 0.5, 0.5]
 # zuran = -2.0
 # noise = 0.05
@@ -97,13 +97,13 @@ zu = jnp.hstack(
     (jnp.linspace(-zuran, zuran, 150), t_offset + jnp.linspace(-zuran, zuran, 150))
 ).reshape(-1, 1)
 
-lsu = zu[1][0] - zu[0][0]
+lsu = zu[0][0] - zu[1][0]
 
 tgs = []
 lsgs = []
 for i in range(C):
     tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
-    lsgs.append(tg[1] - tg[0])
+    lsgs.append(1.5 * (tg[1] - tg[0]))
     tm2 = jnp.meshgrid(*[tg] * (i + 1))
     tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
@@ -179,5 +179,5 @@ plt.savefig(f_name + "main.pdf")
 plt.show()
 #%%
 tf = jnp.linspace(-max(zgran), max(zgran), 100)
-modelc2.plot_filters(tf, 10, save=f_name + "filts.pdf")
+modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf")
 # %%

@@ -604,7 +604,7 @@ class MOVarNVKM:
             [jnp.vstack((tf for j in range(gp.D))).T for gp in self.g_gps[i]]
             for i in range(self.O)
         ]
-        g_samps = self.sample_diag_g_gps(tfs, 10, jrnd.split(key, 2))
+        g_samps = self.sample_diag_g_gps(tfs, N_s, jrnd.split(key, 2))
 
         _, axs = plt.subplots(
             ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
