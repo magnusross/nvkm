@@ -581,7 +581,7 @@ class MOVarNVKM:
         u_samps = self.sample_u_gp(tu, N_s, jrnd.split(key, 2))
         axs[0].set_ylabel(f"$u$")
         axs[0].set_xlabel("$t$")
-        axs[0].scatter(self.zu, self.q_pars["mu_u"], c="blue", alpha=0.5)
+        axs[0].scatter(self.zu, self.q_pars["mu_u"], c="green", alpha=0.5, s=5.0)
         axs[0].plot(tu, u_samps, c="blue", alpha=0.5)
 
         samps = self.sample(tys, N_s, key)
@@ -589,7 +589,9 @@ class MOVarNVKM:
             axs[i + 1].set_ylabel(f"$y_{i+1}$")
             axs[i + 1].set_xlabel("$t$")
             axs[i + 1].plot(tys[i], samps[i], c="green", alpha=0.5)
-            axs[i + 1].scatter(self.data[0][i], self.data[1][i])
+            axs[i + 1].scatter(
+                self.data[0][i], self.data[1][i], c="blue", alpha=0.5, s=5.0
+            )
 
         if return_axs:
             return axs

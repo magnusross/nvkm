@@ -137,15 +137,15 @@ model = MOVarNVKM(
     q_pars_init=None,
     q_initializer_pars=q_frac,
     lsgs=[lsgs] * O,
-    ampgs=[[ampgs] * C] * O,
     noise=[noise] * O,
-    alpha=[3 / (max(zgran) ** 2)] * O,
+    ampgs=[ampgs] * O,
+    alpha=[[3 / (zgran[i]) ** 2 for i in range(C)]] * O,
     lsu=lsu,
     ampu=1.0,
     N_basis=Nbasis,
 )
 #%%
-model.fit(3000, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
+model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -209,6 +209,3 @@ plt.savefig(f_name + "main.pdf")
 # %%
 print(f"Cambermet NMSE: {NMSE(mean_x1, jnp.array(test_y1)):.2f}")
 print(f"Chimet NMSE: {NMSE(mean_x2, jnp.array(test_y2)):.2f}")
-
-
-# %%

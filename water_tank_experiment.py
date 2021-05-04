@@ -127,7 +127,7 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 # 5e-4
-modelc2.fit(500, 5e-3, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"])
+modelc2.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"])
 print(modelc2.noise)
 print(modelc2.ampu)
 print(modelc2.lsu)
