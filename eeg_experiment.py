@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from nvkm.models import MOVarNVKM
-from nvkm.utils import l2p
+from nvkm.utils import l2p, NMSE
 
 parser = argparse.ArgumentParser(description="EEG MO experiment.")
 parser.add_argument("--Nvu", default=60, type=int)
@@ -22,7 +22,7 @@ parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--Nbatch", default=30, type=int)
 parser.add_argument("--Nbasis", default=30, type=int)
 parser.add_argument("--Ns", default=20, type=int)
-parser.add_argument("--ampgs", default=1.0, type=float)
+parser.add_argument("--ampgs", default=[5], nargs="+", type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.1, type=float)
 parser.add_argument("--f_name", default="eeg", type=str)
@@ -44,19 +44,21 @@ f_name = args.f_name
 data_dir = args.data_dir
 ampgs = args.ampgs
 print(args)
-# Nbatch = 5
+
+# Nbatch = 50
 # Nbasis = 30
-# noise = 0.05
+# noise = 0.1
 # Nits = 500
-# Nvu = 60
+# Nvu = 80
 # Ns = 5
-# lr = 5e-4
-# q_frac = 0.8
-# f_name = "eegdev"
+# lr = 1e-3
+# q_frac = 0.6
+# f_name = "eegc2"
 # data_dir = "data"
-# Nvgs = [15]
-# zgran = [0.2]
-# zuran = 1.8
+# Nvgs = [30]
+# zgran = [0.3]
+# ampgs = [10.0]
+# zuran = 2.0
 #%%
 
 train_df = pd.read_csv(data_dir + "/eeg/eeg_train.csv")
@@ -77,6 +79,7 @@ def make_data(df):
             ysi = yi[~jnp.isnan(yi)]
             ys.append(ysi / jnp.std(ysi))
             y_stds.append(jnp.std(ysi))
+
     return (xs, ys), o_names, y_stds
 
 
@@ -92,7 +95,7 @@ tgs = []
 lsgs = []
 for i in range(C):
     tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
-    lsgs.append(tg[1] - tg[0])
+    lsgs.append(1.5 * (tg[1] - tg[0]))
     tm2 = jnp.meshgrid(*[tg] * (i + 1))
     tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
@@ -105,9 +108,9 @@ model = MOVarNVKM(
     q_pars_init=None,
     q_initializer_pars=q_frac,
     lsgs=[lsgs] * O,
-    ampgs=[[ampgs] * C] * O,
+    ampgs=[ampgs] * O,
     noise=[noise] * O,
-    alpha=[3 / (max(zgran) ** 2)] * O,
+    alpha=[[3 / (zgran[i]) ** 2 for i in range(C)]] * O,
     lsu=lsu,
     ampu=1.0,
     N_basis=Nbasis,
@@ -115,7 +118,14 @@ model = MOVarNVKM(
 
 #%%
 
-model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
+model.fit(
+    Nits,
+    lr,
+    Nbatch,
+    Ns,
+    dont_fit=["lsgs", "ampu", "lsu", "noise"],
+    key=jrnd.PRNGKey(75),
+)
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -132,10 +142,11 @@ model.plot_filters(
     jnp.linspace(-max(zgran), max(zgran), 60), 10, save=f_name + "fit_filters.pdf"
 )
 #%%
-tt = jnp.array(test_df.index)
-preds = model.sample([tt] * O, 50)
+tt = jnp.array((test_df["time"] - train_df["time"].mean()) / train_df["time"].std())
+preds = model.sample([tt] * O, 30)
 #%%
 fig, axs = plt.subplots(3, 1, figsize=(13, 7))
+nmset = 0.0
 for i, key in enumerate(["FZ", "F1", "F2"]):
     idx = o_names.index(key)
     pi = preds[idx] * y_stds[idx]
@@ -153,8 +164,12 @@ for i, key in enumerate(["FZ", "F1", "F2"]):
     axs[i].plot(tt, test_df[key], c="black", ls=":", label="Val. Data")
     axs[i].set_ylabel(key + " (V)")
     axs[i].set_xlabel(" Time (s)")
+    nmse = NMSE(pred_mean, jnp.array(test_df[key]))
+    nmset += nmse
+    axs[i].text(1.0, 5.0, f"SMSE: {nmse:.3f}")
 axs[0].legend()
 plt.tight_layout()
 plt.savefig(f_name + "main.pdf")
 plt.show()
+print(f"Total SMSE: {nmset/3:.3f}")
 # %%
