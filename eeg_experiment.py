@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from nvkm.models import MOVarNVKM
-from nvkm.utils import l2p, NMSE
+from nvkm.utils import l2p, NMSE, make_zg_grids
 
 parser = argparse.ArgumentParser(description="EEG MO experiment.")
 parser.add_argument("--Nvu", default=60, type=int)
@@ -95,14 +95,8 @@ C = len(Nvgs)
 
 zu = jnp.linspace(-zuran, zuran, Nvu).reshape(-1, 1)
 lsu = zu[1][0] - zu[0][0]
-tgs = []
-lsgs = []
-for i in range(C):
-    tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
-    lsgs.append(1.5 * (tg[1] - tg[0]))
-    tm2 = jnp.meshgrid(*[tg] * (i + 1))
-    tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
+tgs, lsgs = make_zg_grids(zgran, Nvgs)
 
 # %%
 model = MOVarNVKM(

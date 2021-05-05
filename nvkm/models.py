@@ -305,6 +305,7 @@ class MOVarNVKM:
         q_class: MOIndependentGaussians = MOIndependentGaussians,
         q_pars_init: Union[VIPars, None] = None,
         q_initializer_pars=None,
+        q_init_key=None,
         likelihood: Callable = gaussain_likelihood,
         N_basis: int = 500,
         ampgs: List[List[float]] = [[1.0], [1.0]],
@@ -339,7 +340,9 @@ class MOVarNVKM:
         self.likelihood = likelihood
         self.q_of_v = q_class()
         if q_pars_init is None:
-            q_pars_init = self.q_of_v.initialize(self, q_initializer_pars)
+            q_pars_init = self.q_of_v.initialize(
+                self, q_initializer_pars, key=q_init_key
+            )
         self.q_pars = q_pars_init
 
     def set_G_gps(self, ampgs, lsgs):
