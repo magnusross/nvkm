@@ -1,5 +1,5 @@
 #%%
-from nvkm.utils import l2p, make_zg_random, make_zg_grids
+from nvkm.utils import l2p, make_zg_grids
 from nvkm.models import IOMOVarNVKM
 
 from jax.config import config
@@ -25,6 +25,7 @@ parser.add_argument("--ampgs", default=[2, 30, 30], nargs="+", type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.05, type=float)
 parser.add_argument("--f_name", default="tank", type=str)
+parser.add_argument("--key", default=1, type=int)
 parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
 
@@ -43,6 +44,7 @@ q_frac = args.q_frac
 f_name = args.f_name
 data_dir = args.data_dir
 ampgs = args.ampgs
+key = args.key
 print(args)
 # data_dir = "data"
 # Nits = 200
@@ -59,10 +61,11 @@ print(args)
 # noise = 0.05
 # Nbasis = 30
 # Ns = 5
+# key = 1
 
 
 # print(args)
-
+keys = jrnd.split(jrnd.PRNGKey(key), 6)
 
 #%%
 data = pd.read_csv(data_dir + "/water_tanks.csv")
@@ -114,6 +117,7 @@ modelc2 = IOMOVarNVKM(
     ytrain,
     q_pars_init=None,
     q_initializer_pars=q_frac,
+    q_init_key=keys[0],
     lsgs=[lsgs],
     ampgs=[ampgs],
     alpha=[[3 / (zgran[i]) ** 2 for i in range(C)]],
@@ -125,7 +129,14 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 # 5e-4
-modelc2.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "ampu", "noise", "u_noise"])
+modelc2.fit(
+    Nits,
+    lr,
+    Nbatch,
+    Ns,
+    dont_fit=["lsgs", "lsu", "ampu", "noise", "u_noise"],
+    key=keys[1],
+)
 print(modelc2.noise)
 print(modelc2.ampu)
 print(modelc2.lsu)
@@ -135,19 +146,19 @@ modelc2.save(f_name + "tank_model.pkl")
 # %%
 tp_train = jnp.linspace(-zuran, zuran, 400)
 tp_test = tp_train + t_offset
-axs = modelc2.plot_samples(tp_train, [tp_train], 10, return_axs=True,)
+axs = modelc2.plot_samples(tp_train, [tp_train], 10, return_axs=True, key=keys[2])
 axs[0].set_xlim([-zuran, zuran])
 axs[1].set_xlim([-zuran, zuran])
 plt.savefig(f_name + "samps_train.pdf")
 #%%
-axs = modelc2.plot_samples(tp_test, [tp_test], 10, return_axs=True)
+axs = modelc2.plot_samples(tp_test, [tp_test], 10, return_axs=True, key=keys[3])
 axs[0].set_xlim([t_offset - zuran, t_offset + zuran])
 axs[1].set_xlim([t_offset - zuran, t_offset + zuran])
 axs[1].plot(ytest[0][0], ytest[1][0], c="black", ls=":")
 plt.savefig(f_name + "samps_test.pdf")
 # axs[1].xrange(18, 22)
 #%%
-p_samps = modelc2.sample(ytest[0], 50)
+p_samps = modelc2.sample(ytest[0], 50, key=keys[4])
 #%%
 scaled_samps = p_samps[0] * y_std + y_mean
 pred_mean = jnp.mean(scaled_samps, axis=1)
@@ -177,7 +188,7 @@ plt.savefig(f_name + "main.pdf")
 plt.show()
 #%%
 tf = jnp.linspace(-max(zgran), max(zgran), 100)
-modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf")
+modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf", key=keys[5])
 
 
 # %%

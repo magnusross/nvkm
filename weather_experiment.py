@@ -29,6 +29,7 @@ parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.1, type=float)
 parser.add_argument("--f_name", default="eeg", type=str)
 parser.add_argument("--data_dir", default="data", type=str)
+parser.add_argument("--key", default=1, type=int)
 args = parser.parse_args()
 
 Nbatch = args.Nbatch
@@ -45,6 +46,7 @@ q_frac = args.q_frac
 f_name = args.f_name
 data_dir = args.data_dir
 ampgs = args.ampgs
+key = args.key
 print(args)
 
 # Nbatch = 50
@@ -54,17 +56,18 @@ print(args)
 # Nvu = 140
 # Ns = 5
 # lr = 1e-2
-# q_frac = 0.6
-# f_name = "eegdev"
+# q_frac = 0.5
+# f_name = "weather"
 # data_dir = "data"
-# Nvgs = [15, 8]
-# zgran = [0.5, 0.4]
+# Nvgs = [15, 8, 6]
+# zgran = [0.5, 0.2, 0.1]
 # zuran = 2.8
-# ampgs = 5.0
+# ampgs = [5.0, 5.0, 5.0]
+# key = 1
 
 
+keys = jrnd.split(jrnd.PRNGKey(key), 5)
 data = loadmat(data_dir + "/weatherdata.mat")
-
 
 # %%
 
@@ -136,6 +139,7 @@ model = MOVarNVKM(
     train_data,
     q_pars_init=None,
     q_initializer_pars=q_frac,
+    q_init_key=keys[0],
     lsgs=[lsgs] * O,
     noise=[noise] * O,
     ampgs=[ampgs] * O,
@@ -145,7 +149,7 @@ model = MOVarNVKM(
     N_basis=Nbasis,
 )
 #%%
-model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"])
+model.fit(Nits, 1e-3, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"], key=keys[1])
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -159,19 +163,26 @@ axs = model.plot_samples(
     [jnp.linspace(-zuran, zuran, 300)] * O,
     Ns,
     return_axs=True,
+    key=keys[2],
 )
 axs[2].scatter(s_testx1, s_testy1, c="red", alpha=0.3)
 axs[3].scatter(s_testx2, s_testy2, c="red", alpha=0.3)
 plt.savefig(f_name + "fit_samples.pdf")
 plt.show()
+
 #%%
 model.plot_filters(
-    jnp.linspace(-max(zgran), max(zgran), 60), 10, save=f_name + "fit_filters.pdf"
+    jnp.linspace(-max(zgran), max(zgran), 60),
+    10,
+    save=f_name + "fit_filters.pdf",
+    key=keys[3],
 )
 
 # %%
 
-preds = model.sample([jnp.array([12.5]), s_testx1, s_testx2, jnp.array([12.5])], 50)
+preds = model.sample(
+    [jnp.array([12.5]), s_testx1, s_testx2, jnp.array([12.5])], 50, key=keys[4]
+)
 
 preds1 = preds[1] * stds[1] + means[1]
 mean_x1 = jnp.mean(preds1, axis=1)
@@ -209,3 +220,5 @@ plt.savefig(f_name + "main.pdf")
 # %%
 print(f"Cambermet NMSE: {NMSE(mean_x1, jnp.array(test_y1)):.2f}")
 print(f"Chimet NMSE: {NMSE(mean_x2, jnp.array(test_y2)):.2f}")
+
+# %%

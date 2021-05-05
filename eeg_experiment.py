@@ -26,6 +26,7 @@ parser.add_argument("--ampgs", default=[5], nargs="+", type=float)
 parser.add_argument("--q_frac", default=0.5, type=float)
 parser.add_argument("--noise", default=0.1, type=float)
 parser.add_argument("--f_name", default="eeg", type=str)
+parser.add_argument("--key", default=1, type=int)
 parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
 
@@ -43,6 +44,7 @@ q_frac = args.q_frac
 f_name = args.f_name
 data_dir = args.data_dir
 ampgs = args.ampgs
+key = args.key
 print(args)
 
 # Nbatch = 50
@@ -59,6 +61,8 @@ print(args)
 # zgran = [0.3]
 # ampgs = [10.0]
 # zuran = 2.0
+# key = 1
+keys = jrnd.split(jrnd.PRNGKey(key), 5)
 #%%
 
 train_df = pd.read_csv(data_dir + "/eeg/eeg_train.csv")
@@ -107,6 +111,7 @@ model = MOVarNVKM(
     train_data,
     q_pars_init=None,
     q_initializer_pars=q_frac,
+    q_init_key=keys[0],
     lsgs=[lsgs] * O,
     ampgs=[ampgs] * O,
     noise=[noise] * O,
@@ -119,12 +124,7 @@ model = MOVarNVKM(
 #%%
 
 model.fit(
-    Nits,
-    lr,
-    Nbatch,
-    Ns,
-    dont_fit=["lsgs", "ampu", "lsu", "noise"],
-    key=jrnd.PRNGKey(75),
+    Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
 )
 print(model.noise)
 print(model.ampu)
@@ -137,13 +137,17 @@ model.plot_samples(
     [jnp.linspace(-zuran, zuran, 300)] * O,
     Ns,
     save=f_name + "fit_samples.pdf",
+    key=keys[2],
 )
 model.plot_filters(
-    jnp.linspace(-max(zgran), max(zgran), 60), 10, save=f_name + "fit_filters.pdf"
+    jnp.linspace(-max(zgran), max(zgran), 60),
+    10,
+    save=f_name + "fit_filters.pdf",
+    key=keys[3],
 )
 #%%
 tt = jnp.array((test_df["time"] - train_df["time"].mean()) / train_df["time"].std())
-preds = model.sample([tt] * O, 30)
+preds = model.sample([tt] * O, 30, key=keys[4])
 #%%
 fig, axs = plt.subplots(3, 1, figsize=(13, 7))
 nmset = 0.0
