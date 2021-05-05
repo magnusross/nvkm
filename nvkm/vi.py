@@ -115,8 +115,12 @@ class MOIndependentGaussians(BaseGaussain):
     def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
 
         q_pars = {}
+        # q_pars["LC_gs"] = [
+        #     [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
+        # ]
         q_pars["LC_gs"] = [
-            [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
+            [jnp.eye(len(arr)) * frac for arr in model.p_pars["LK_gs"][i]]
+            for i in range(model.O)
         ]
         q_pars["LC_u"] = frac * model.p_pars["LK_u"]
         q_pars["mu_gs"] = []

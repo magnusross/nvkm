@@ -351,7 +351,7 @@ class MOVarNVKM:
                     N_basis=self.N_basis,
                     D=j + 1,
                     ls=lsgs[i][j],
-                    amp=ampgs[i][j],
+                    amp=1.0,
                 )
                 for j in range(self.C[i])
             ]
@@ -368,7 +368,7 @@ class MOVarNVKM:
         return {
             "LK_gs": [
                 [
-                    self.g_gps[i][j].compute_covariances(ampgs[i][j], lsgs[i][j])[1]
+                    self.g_gps[i][j].compute_covariances(1.0, lsgs[i][j])[1]
                     for j in range(self.C[i])
                 ]
                 for i in range(self.O)
@@ -384,14 +384,7 @@ class MOVarNVKM:
             for j, gp in enumerate(self.g_gps[i]):
                 keys = jrnd.split(keys[1])
                 il.append(
-                    gp._sample(
-                        ts[i][j],
-                        vs[i][j],
-                        self.ampgs[i][j],
-                        self.lsgs[i][j],
-                        N_s,
-                        keys[0],
-                    )
+                    gp._sample(ts[i][j], vs[i][j], 1.0, self.lsgs[i][j], N_s, keys[0],)
                 )
             samps.append(il)
 
@@ -426,15 +419,16 @@ class MOVarNVKM:
                 G_gp_i = self.g_gps[i][j]
 
                 thetagl, betagl, wgl = G_gp_i.sample_basis(
-                    keys[2], N_s, ampgs[i][j], lsgs[i][j]
+                    keys[2], N_s, 1.0, lsgs[i][j]
                 )
-                _, G_LKvv = G_gp_i.compute_covariances(ampgs[i][j], lsgs[i][j])
+                _, G_LKvv = G_gp_i.compute_covariances(1.0, lsgs[i][j])
 
                 qgl = vmap(
                     lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
                 )(v_samps["gs"][i][j], thetagl, betagl, wgl)
                 # samps += jnp.zeros((len(t), N_s))
-                sampsi += map_fast_I(
+
+                sampsi += ampgs[i][j] ** (j + 1) * map_fast_I(
                     ts[i],
                     G_gp_i.z,
                     u_gp.z,
@@ -446,7 +440,7 @@ class MOVarNVKM:
                     qgl,
                     wul,
                     qul,
-                    ampgs[i][j],
+                    1.0,
                     ampu,
                     self.alpha[i][j],
                     l2p(lsgs[i][j]),
@@ -829,6 +823,8 @@ class IOMOVarNVKM(MOVarNVKM):
                 return get_params(opt_state)
 
             if i % 10 == 0:
+                # print(bound_arg[0])
+                # print(bound_arg[0])
                 print(f"it: {i} F: {value} ")
 
             opt_state = opt_update(i, grads, opt_state)

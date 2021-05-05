@@ -1,5 +1,5 @@
 #%%
-from nvkm.utils import l2p
+from nvkm.utils import l2p, make_zg_random, make_zg_grids
 from nvkm.models import IOMOVarNVKM
 
 from jax.config import config
@@ -45,21 +45,25 @@ data_dir = args.data_dir
 ampgs = args.ampgs
 print(args)
 # data_dir = "data"
-# Nits = 1000
+# Nits = 200
 # Nbatch = 30
-# lr = 1e-3
-# q_frac = 0.
+# lr = 1e-2
+# q_frac = 0.55
 # f_name = "dev"
-# Nvgs = [25, 15]
-# zgran = [0.5, 0.25]
-# ampgs = [1.0, 50.0]
-# zuran = -2.0
+# Nvgs = [25, 8, 6, 3]
+# zgran = [0.3, 0.2, 0.2, 0.2]
+# a = 6.0
+# ampgs = [a ** 1, a ** 2, a ** 3, a ** 4]
+# zuran = 2.0
+# zgmode = "random"
 # noise = 0.05
 # Nbasis = 30
 # Ns = 5
 
 
 # print(args)
+
+
 #%%
 data = pd.read_csv(data_dir + "/water_tanks.csv")
 y_mean, y_std = data["yEst"].mean(), data["yEst"].std()
@@ -99,16 +103,10 @@ zu = jnp.hstack(
 
 lsu = zu[0][0] - zu[1][0]
 
-tgs = []
-lsgs = []
-for i in range(C):
-    tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
-    lsgs.append(1.5 * (tg[1] - tg[0]))
-    tm2 = jnp.meshgrid(*[tg] * (i + 1))
-    tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
 
-print([len(l) for l in [tgs]])
+tgs, lsgs = make_zg_grids(zgran, Nvgs)
 # %%
+
 modelc2 = IOMOVarNVKM(
     [tgs],
     zu,
@@ -127,7 +125,7 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 # 5e-4
-modelc2.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"])
+modelc2.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "lsu", "ampu", "noise", "u_noise"])
 print(modelc2.noise)
 print(modelc2.ampu)
 print(modelc2.lsu)
@@ -180,4 +178,6 @@ plt.show()
 #%%
 tf = jnp.linspace(-max(zgran), max(zgran), 100)
 modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf")
+
+
 # %%
