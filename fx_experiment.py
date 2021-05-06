@@ -2,10 +2,10 @@
 from nvkm.models import MOVarNVKM
 from nvkm.utils import l2p, NMSE, make_zg_grids
 
-from wbml.data.exchange import load
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
 import jax.random as jrnd
+import pandas as pd
 import argparse
 
 parser = argparse.ArgumentParser(description="FX MO experiment.")
@@ -22,7 +22,7 @@ parser.add_argument("--ampgs", default=[5, 5], nargs="+", type=float)
 parser.add_argument("--q_frac", default=0.6, type=float)
 parser.add_argument("--noise", default=0.05, type=float)
 parser.add_argument("--f_name", default="fx", type=str)
-parser.add_argument("--key", default=1, type=int)
+parser.add_argument("--key3", default=1, type=int)
 parser.add_argument("--data_dir", default="data", type=str)
 args = parser.parse_args()
 
@@ -61,8 +61,8 @@ print(args)
 
 keys = jrnd.split(jrnd.PRNGKey(key), 5)
 #%%
-_, train_df, test_df = load(nguyen=True)
-
+train_df = pd.read_csv(data_dir + "/fx/fx_train.csv")
+test_df = pd.read_csv(data_dir + "/fx/fx_test.csv")
 
 # df.to_csv("data/fx.csv")
 train_df["time"] = train_df.index
@@ -119,7 +119,7 @@ model = MOVarNVKM(
 )
 #%%
 model.fit(
-    1000, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
+    Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
 )
 print(model.noise)
 print(model.ampu)
