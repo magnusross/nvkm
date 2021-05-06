@@ -119,7 +119,7 @@ model = MOVarNVKM(
 )
 #%%
 model.fit(
-    300, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
+    1000, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
 )
 print(model.noise)
 print(model.ampu)
