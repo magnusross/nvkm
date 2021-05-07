@@ -10,6 +10,9 @@ from jax import jit, vmap
 import jax
 import matplotlib.pyplot as plt
 
+import numpy as onp
+from sklearn.cluster import KMeans
+
 
 from .settings import JITTER
 
@@ -131,6 +134,11 @@ def RMSE(yp, ye):
 @jit
 def NMSE(yp, ytrue):
     return jnp.mean((yp - ytrue) ** 2) / jnp.mean((jnp.mean(ytrue) - ytrue) ** 2)
+
+
+@jit
+def gaussian_NLPD(yp, ypvar, ytrue):
+    return jnp.mean(0.5 * jnp.log(2 * jnp.pi * ypvar) + (ytrue - yp) ** 2 / (2 * ypvar))
 
 
 @jit
@@ -287,10 +295,38 @@ def make_zg_grids(zgran: list, Nvgs: list):
     lsgs = []
     for i in range(len(Nvgs)):
         tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i])
-        lsgs.append(tg[1] - tg[0])
+        lsgs.append(1.5 * (tg[1] - tg[0]))
         tm2 = jnp.meshgrid(*[tg] * (i + 1))
         tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
     return tgs, lsgs
+
+
+def _make_single_random(zg, Nvg, Nd, key=jrnd.PRNGKey(1)):
+    Ns = 10000
+
+    x = zg * jrnd.normal(key=key, shape=(Ns, Nd))
+    x = x[jnp.linalg.norm(x, axis=1) < zg]
+
+    kmeans = KMeans(n_clusters=Nvg, random_state=0).fit(x)
+    tg = kmeans.cluster_centers_
+
+    dists = map2matrix(lambda x, y: jnp.sqrt(jnp.sum((x - y) ** 2)), tg, tg)
+    dists += 1e12 * jnp.eye(Nvg)
+    max_dist = jnp.max(jnp.min(dists, axis=1))
+    max_norm = jnp.sort(jnp.linalg.norm(tg, axis=1))[-int(0.3 * Nvg)]
+    return (tg, 1.2 * max_dist, max_norm)
+
+
+def make_zg_random(zgran: list, Nvgs: list, keyi=0):
+    tgs, lsgs, rans = [], [], []
+    for i in range(len(Nvgs)):
+        tgi, lsgi, ran = _make_single_random(
+            zgran[i], Nvgs[i], i + 1, key=jrnd.PRNGKey(keyi + i)
+        )
+        tgs.append(jnp.array(tgi))
+        lsgs.append(jnp.array(lsgi))
+        rans.append(jnp.array(ran))
+    return tgs, lsgs, rans
 
 
 # def load_ncmogp_data(
