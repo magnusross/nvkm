@@ -148,18 +148,19 @@ nmset = 0.0
 for i, key in enumerate(["FZ", "F1", "F2"]):
     idx = o_names.index(key)
     pi = preds[idx] * y_stds[idx]
+    t = test_df["time"]
     pred_mean = jnp.mean(pi, axis=1)
     pred_std = jnp.std(pi, axis=1)
-    axs[i].plot(tt, pred_mean, c="green", label="Pred. Mean")
+    axs[i].plot(t, pred_mean, c="green", label="Pred. Mean")
     axs[i].fill_between(
-        tt,
+        t,
         pred_mean + 2 * pred_std,
         pred_mean - 2 * pred_std,
         alpha=0.1,
         color="green",
         label="$\pm 2 \sigma$",
     )
-    axs[i].plot(tt, test_df[key], c="black", ls=":", label="Val. Data")
+    axs[i].plot(t, test_df[key], c="black", ls=":", label="Val. Data")
     axs[i].set_ylabel(key + " (V)")
     axs[i].set_xlabel(" Time (s)")
     nmse = NMSE(pred_mean, jnp.array(test_df[key]))
