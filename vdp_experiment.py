@@ -13,59 +13,59 @@ import pickle
 import GPy
 import argparse
 
-# parser = argparse.ArgumentParser(description="EEG MO experiment.")
-# parser.add_argument("--Nvu", default=70, type=int)
-# parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
-# parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
-# parser.add_argument("--zurange", default=2.0, type=float)
-# parser.add_argument("--Nits", default=1000, type=int)
-# parser.add_argument("--lr", default=1e-2, type=float)
-# parser.add_argument("--Nbatch", default=30, type=int)
-# parser.add_argument("--Nbasis", default=30, type=int)
-# parser.add_argument("--Ns", default=5, type=int)
-# parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
-# parser.add_argument("--q_frac", default=0.7, type=float)
-# parser.add_argument("--noise", default=0.1, type=float)
-# parser.add_argument("--f_name", default="vdp", type=str)
-# parser.add_argument("--mode", default="expr", type=str)
-# parser.add_argument("--key", default=1, type=int)
-# parser.add_argument("--mus", default=[10.0, 1.0, 0.1, 0.01], nargs="+", type=float)
-# args = parser.parse_args()
+parser = argparse.ArgumentParser(description="EEG MO experiment.")
+parser.add_argument("--Nvu", default=70, type=int)
+parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
+parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
+parser.add_argument("--zurange", default=2.0, type=float)
+parser.add_argument("--Nits", default=1000, type=int)
+parser.add_argument("--lr", default=1e-2, type=float)
+parser.add_argument("--Nbatch", default=30, type=int)
+parser.add_argument("--Nbasis", default=30, type=int)
+parser.add_argument("--Ns", default=5, type=int)
+parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
+parser.add_argument("--q_frac", default=0.7, type=float)
+parser.add_argument("--noise", default=0.1, type=float)
+parser.add_argument("--f_name", default="vdp", type=str)
+parser.add_argument("--mode", default="expr", type=str)
+parser.add_argument("--key", default=1, type=int)
+parser.add_argument("--mus", default=[10.0, 1.0, 0.1, 0.01], nargs="+", type=float)
+args = parser.parse_args()
 
-# Nbatch = args.Nbatch
-# Nbasis = args.Nbasis
-# noise = args.noise
-# Nits = args.Nits
-# Nvu = args.Nvu
-# Nvgs = args.Nvgs
-# zgran = args.zgrange
-# zuran = args.zurange
-# Ns = args.Ns
-# lr = args.lr
-# q_frac = args.q_frac
-# f_name = args.f_name
-# ampgs = args.ampgs
-# key = args.key
-# mus = args.mus
-# mode = args.mode
-# print(args)
+Nbatch = args.Nbatch
+Nbasis = args.Nbasis
+noise = args.noise
+Nits = args.Nits
+Nvu = args.Nvu
+Nvgs = args.Nvgs
+zgran = args.zgrange
+zuran = args.zurange
+Ns = args.Ns
+lr = args.lr
+q_frac = args.q_frac
+f_name = args.f_name
+ampgs = args.ampgs
+key = args.key
+mus = args.mus
+mode = args.mode
+print(args)
 
-Nbatch = 50
-Nbasis = 30
-noise = 0.1
-Nits = 500
-Nvu = 70
-Ns = 5
-lr = 1e-2
-q_frac = 0.8
-f_name = "vdp"
-mode = "expr"
-Nvgs = [15, 10, 8]
-zgran = [0.3, 0.2, 0.2]
-ampgs = [2.0, 2.0, 2.0]
-zuran = 2.0
-key = 1
-mus = [10.0, 1.0, 0.1, 0.01]
+# Nbatch = 50
+# Nbasis = 30
+# noise = 0.1
+# Nits = 500
+# Nvu = 70
+# Ns = 5
+# lr = 1e-2
+# q_frac = 0.8
+# f_name = "vdp"
+# mode = "demo"
+# Nvgs = [15, 10, 8]
+# zgran = [0.3, 0.2, 0.2]
+# ampgs = [2.0, 2.0, 2.0]
+# zuran = 2.0
+# key = 1
+# mus = [10.0, 1.0, 0.1, 0.01]
 
 keys = jrnd.split(jrnd.PRNGKey(key), 5)
 
@@ -83,7 +83,7 @@ def vdp(t, z, mu=1.0, key=jrnd.PRNGKey(1)):
 
 def generate_vdp_data(mu, noise=0.1, impute=True, N=500, N_te=50, key=jrnd.PRNGKey(1)):
     keys = jrnd.split(key, 3)
-    x = jnp.linspace(0, 200, N)
+    x = jnp.linspace(0, 100, N)
     sol = osp.integrate.solve_ivp(
         partial(vdp, mu=mu, key=keys[0]), [0, 200], [0, 0], t_eval=x
     )
@@ -107,7 +107,7 @@ def generate_vdp_data(mu, noise=0.1, impute=True, N=500, N_te=50, key=jrnd.PRNGK
 # %%
 
 if mode == "demo":
-    x_train, y_train, x_test, y_test = generate_vdp_data(0.01, impute=True)
+    x_train, y_train, x_test, y_test = generate_vdp_data(1.0, impute=True)
 
     ode_kernel = GPy.kern.EQ_ODE2(input_dim=2)
     gpy_model = GPy.models.GPRegression(
