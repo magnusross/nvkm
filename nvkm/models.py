@@ -387,7 +387,7 @@ class MOVarNVKM:
             for j, gp in enumerate(self.g_gps[i]):
                 keys = jrnd.split(keys[1])
                 il.append(
-                    gp._sample(ts[i][j], vs[i][j], 1.0, self.lsgs[i][j], N_s, keys[0],)
+                    gp._sample(ts[i][j], vs[i][j], 1.0, self.lsgs[i][j], N_s, keys[1],)
                 )
             samps.append(il)
 
@@ -418,11 +418,11 @@ class MOVarNVKM:
         for i in range(self.O):
             sampsi = jnp.zeros((len(ts[i]), N_s))
             for j in range(0, self.C[i]):
-
+                keys = jrnd.split(keys[-1], 2)
                 G_gp_i = self.g_gps[i][j]
 
                 thetagl, betagl, wgl = G_gp_i.sample_basis(
-                    keys[2], N_s, 1.0, lsgs[i][j]
+                    keys[0], N_s, 1.0, lsgs[i][j]
                 )
                 _, G_LKvv = G_gp_i.compute_covariances(1.0, lsgs[i][j])
 

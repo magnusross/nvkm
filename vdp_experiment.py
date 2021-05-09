@@ -270,6 +270,11 @@ else:
             dont_fit=["lsgs", "ampu", "lsu", "noise"],
             key=keys[3],
         )
+        print(model.noise)
+        print(model.ampu)
+        print(model.lsu)
+        print(model.ampgs)
+        print(model.lsgs)
 
         axs = model.plot_samples(
             jnp.linspace(-zuran, zuran, 300),
