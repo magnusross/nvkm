@@ -416,6 +416,9 @@ class MOVarNVKM:
 
         samps = []
         for i in range(self.O):
+            if ts[i] is None:
+                samps.append(None)
+                continue
             sampsi = jnp.zeros((len(ts[i]), N_s))
             for j in range(0, self.C[i]):
                 keys = jrnd.split(keys[-1], 2)
@@ -463,6 +466,16 @@ class MOVarNVKM:
             self.lsu,
             N_s,
             jrnd.split(key, 3),
+        )
+
+    def predict(self, ts, N_s, key=jrnd.PRNGKey(1)):
+        samps = self.sample(ts, N_s, key=key)
+        return (
+            [jnp.mean(si, axis=1) if si is not None else si for si in samps],
+            [
+                jnp.var(si, axis=1) + self.noise[i] ** 2 if si is not None else si
+                for i, si in enumerate(samps)
+            ],
         )
 
     @partial(jit, static_argnums=(0, 8))

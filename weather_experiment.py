@@ -1,8 +1,9 @@
 #%%
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
-from nvkm.utils import l2p, make_zg_grids, RMSE, NMSE
+from nvkm.utils import l2p, make_zg_grids, RMSE, NMSE, gaussian_NLPD
 from nvkm.models import MOVarNVKM
+from nvkm.experiments import WeatherDataSet
 
 from jax.config import config
 
@@ -61,71 +62,15 @@ print(args)
 # data_dir = "data"
 # Nvgs = [15, 8, 6]
 # zgran = [0.5, 0.2, 0.1]
-# zuran = 2.8
+# zuran = 2.0
 # ampgs = [5.0, 5.0, 5.0]
 # key = 1
 
 
+data = WeatherDataSet(data_dir)
 keys = jrnd.split(jrnd.PRNGKey(key), 5)
-data = loadmat(data_dir + "/weatherdata.mat")
-
 # %%
-
-all_x = [jnp.array(x[0].flatten()) for x in data["xT"]]
-all_y = [jnp.array(y[0].flatten()) for y in data["yT"]]
-#%%
-
-train_x = copy.deepcopy(all_x)
-train_y = copy.deepcopy(all_y)
-
-train_x1 = []
-train_y1 = []
-test_x1 = []
-test_y1 = []
-for i, xi in enumerate(all_x[1]):
-    if not (10.2 < xi and xi < 10.8):
-
-        train_x1.append(xi)
-        train_y1.append(all_y[1][i])
-    else:
-        test_x1.append(xi)
-        test_y1.append(all_y[1][i])
-
-
-train_x2 = []
-train_y2 = []
-test_x2 = []
-test_y2 = []
-for i, xi in enumerate(all_x[2]):
-    if not 13.5 < xi < 14.2:
-        train_x2.append(xi)
-        train_y2.append(all_y[2][i])
-    else:
-        test_x2.append(xi)
-        test_y2.append(all_y[2][i])
-
-train_x[1] = jnp.array(train_x1)
-train_x[2] = jnp.array(train_x2)
-train_y[1] = jnp.array(train_y1)
-train_y[2] = jnp.array(train_y2)
-#%%
-means = [jnp.mean(t) for t in train_y]
-stds = [jnp.std(t) for t in train_y]
-s_train_x = [jnp.array(t - 12.5) for t in train_x]
-s_train_y = [(t - means[i]) / stds[i] for i, t in enumerate(train_y)]
-
-s_testx1 = jnp.array(test_x1) - 12.5
-s_testx2 = jnp.array(test_x2) - 12.5
-s_testy1 = (jnp.array(test_y1) - means[1]) / stds[1]
-s_testy2 = (jnp.array(test_y2) - means[2]) / stds[2]
-
-
-train_data = (s_train_x, s_train_y)
-
-# %%
-
-# %%
-O = len(train_data[0])
+O = data.O
 C = len(Nvgs)
 
 zu = jnp.linspace(-zuran, zuran, Nvu).reshape(-1, 1)
@@ -136,7 +81,7 @@ tgs, lsgs = make_zg_grids(zgran, Nvgs)
 model = MOVarNVKM(
     [tgs] * O,
     zu,
-    train_data,
+    (data.strain_x, data.strain_y),
     q_pars_init=None,
     q_initializer_pars=q_frac,
     q_init_key=keys[0],
@@ -165,8 +110,8 @@ axs = model.plot_samples(
     return_axs=True,
     key=keys[2],
 )
-axs[2].scatter(s_testx1, s_testy1, c="red", alpha=0.3)
-axs[3].scatter(s_testx2, s_testy2, c="red", alpha=0.3)
+axs[2].scatter(data.stest_x[1], data.stest_y[1], c="red", alpha=0.3)
+axs[3].scatter(data.stest_x[2], data.stest_y[2], c="red", alpha=0.3)
 plt.savefig(f_name + "fit_samples.pdf")
 plt.show()
 
@@ -177,48 +122,32 @@ model.plot_filters(
     save=f_name + "fit_filters.pdf",
     key=keys[3],
 )
+#%%
+spreds = model.predict(data.stest_x, 5, key=keys[4])
+_, pred_mean = data.upscale(data.stest_x, spreds[0])
+_, pred_var = data.upscale(data.stest_x, spreds[1])
+#%%
 
-# %%
+fig, axs = plt.subplots(2, 1, figsize=(5, 5))
+for i in range(2):
+    axs[i].plot(
+        data.test_x[i + 1], data.test_y[i + 1], c="black", ls=":", label="Val. Data"
+    )
+    axs[i].plot(data.test_x[i + 1], pred_mean[i + 1], c="green", label="Pred. Mean")
+    axs[i].fill_between(
+        data.test_x[i + 1],
+        pred_mean[i + 1] + 2 * jnp.sqrt(pred_var[i + 1]),
+        pred_mean[i + 1] - 2 * jnp.sqrt(pred_var[i + 1]),
+        alpha=0.1,
+        color="green",
+        label="$\pm 2 \sigma$",
+    )
 
-preds = model.sample(
-    [jnp.array([12.5]), s_testx1, s_testx2, jnp.array([12.5])], 50, key=keys[4]
-)
-
-preds1 = preds[1] * stds[1] + means[1]
-mean_x1 = jnp.mean(preds1, axis=1)
-std_x1 = jnp.std(preds1, axis=1)
-
-preds2 = preds[2] * stds[2] + means[2]
-mean_x2 = jnp.mean(preds2, axis=1)
-std_x2 = jnp.std(preds2, axis=1)
-
-fig, axs = plt.subplots(2, 1, figsize=(10, 5))
-axs[0].plot(test_x1, test_y1, c="black", ls=":", label="Val. Data")
-axs[0].plot(test_x1, mean_x1, c="green", label="Pred. Mean")
-axs[0].fill_between(
-    test_x1,
-    mean_x1 + 2 * std_x1,
-    mean_x1 - 2 * std_x1,
-    alpha=0.1,
-    color="green",
-    label="$\pm 2 \sigma$",
-)
-axs[0].text(10.2, 18, f"NMSE: {NMSE(mean_x1, jnp.array(test_y1)):.2f}")
-
-axs[1].plot(test_x2, test_y2, c="black", ls=":", label="Val. Data")
-axs[1].plot(test_x2, mean_x2, c="green", label="Pred. Mean")
-axs[1].fill_between(
-    test_x2,
-    mean_x2 + 2 * std_x2,
-    mean_x2 - 2 * std_x2,
-    alpha=0.1,
-    color="green",
-    label="$\pm 2 \sigma$",
-)
-axs[1].text(13.5, 22, f"NMSE: {NMSE(mean_x2, jnp.array(test_y2)):.2f}")
 plt.savefig(f_name + "main.pdf")
 # %%
-print(f"Cambermet NMSE: {NMSE(mean_x1, jnp.array(test_y1)):.2f}")
-print(f"Chimet NMSE: {NMSE(mean_x2, jnp.array(test_y2)):.2f}")
+print(f"Cambermet NMSE: {NMSE(pred_mean[1], data.test_y[1]):.2f}")
+print(f"Chimet NMSE: {NMSE(pred_mean[2], data.test_y[2]):.2f}")
+print(f"Cambermet NLPD: {gaussian_NLPD(pred_mean[1], pred_var[1], data.test_y[1]):.2f}")
+print(f"Chimet NLPD: {gaussian_NLPD(pred_mean[2], pred_var[2], data.test_y[2]):.2f}")
 
 # %%
