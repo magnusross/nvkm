@@ -13,63 +13,68 @@ import scipy as osp
 import pickle
 import GPy
 import argparse
+from pathlib import Path
 
-# parser = argparse.ArgumentParser(description="EEG MO experiment.")
-# parser.add_argument("--Nvu", default=70, type=int)
-# parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
-# parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
-# parser.add_argument("--zurange", default=2.0, type=float)
-# parser.add_argument("--Nits", default=1000, type=int)
-# parser.add_argument("--lr", default=1e-2, type=float)
-# parser.add_argument("--Nbatch", default=30, type=int)
-# parser.add_argument("--Nbasis", default=30, type=int)
-# parser.add_argument("--Ns", default=5, type=int)
-# parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
-# parser.add_argument("--q_frac", default=0.7, type=float)
-# parser.add_argument("--noise", default=0.1, type=float)
-# parser.add_argument("--f_name", default="vdp", type=str)
-# parser.add_argument("--mode", default="expr", type=str)
-# parser.add_argument("--rep", default=0, type=int)
-# parser.add_argument("--mus", default=[2.0, 1.0, 0.1, 0.0], nargs="+", type=float)
-# parser.add_argument("--data_dir", default="data", type=str)
-# args = parser.parse_args()
+parser = argparse.ArgumentParser(description="EEG MO experiment.")
+parser.add_argument("--Nvu", default=70, type=int)
+parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
+parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
+parser.add_argument("--zurange", default=2.0, type=float)
+parser.add_argument("--Nits", default=1000, type=int)
+parser.add_argument("--lr", default=1e-2, type=float)
+parser.add_argument("--Nbatch", default=30, type=int)
+parser.add_argument("--Nbasis", default=30, type=int)
+parser.add_argument("--Ns", default=5, type=int)
+parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
+parser.add_argument("--q_frac", default=0.7, type=float)
+parser.add_argument("--noise", default=0.1, type=float)
+parser.add_argument("--f_name", default="vdp", type=str)
+parser.add_argument("--mode", default="expr", type=str)
+parser.add_argument("--rep", default=0, type=int)
+parser.add_argument("--mus", default=[2.0, 1.0, 0.1, 0.0], nargs="+", type=float)
+parser.add_argument("--data_dir", default="data", type=str)
+parser.add_argument("--preds_dir", default="preds", type=str)
+args = parser.parse_args()
 
-# Nbatch = args.Nbatch
-# Nbasis = args.Nbasis
-# noise = args.noise
-# Nits = args.Nits
-# Nvu = args.Nvu
-# Nvgs = args.Nvgs
-# zgran = args.zgrange
-# zuran = args.zurange
-# Ns = args.Ns
-# lr = args.lr
-# q_frac = args.q_frac
-# f_name = args.f_name
-# ampgs = args.ampgs
-# rep = args.rep
-# mus = args.mus
-# mode = args.mode
-# data_dir = args.data_dir
-# print(args)
+Nbatch = args.Nbatch
+Nbasis = args.Nbasis
+noise = args.noise
+Nits = args.Nits
+Nvu = args.Nvu
+Nvgs = args.Nvgs
+zgran = args.zgrange
+zuran = args.zurange
+Ns = args.Ns
+lr = args.lr
+q_frac = args.q_frac
+f_name = args.f_name
+ampgs = args.ampgs
+rep = args.rep
+mus = args.mus
+mode = args.mode
+data_dir = args.data_dir
+preds_dir = args.preds_dir
+print(args)
 
-Nbatch = 50
-Nbasis = 30
-noise = 0.1
-Nits = 100
-Nvu = 70
-Ns = 5
-lr = 1e-2
-q_frac = 0.8
-f_name = "vdp"
-mode = "expr"
-Nvgs = [15, 10, 8]
-zgran = [0.3, 0.2, 0.2]
-ampgs = [2.0, 2.0, 2.0]
-zuran = 2.0
-rep = 1
-mus = [2.0]
-data_dir = "data"
+# Nbatch = 50
+# Nbasis = 30
+# noise = 0.1
+# Nits = 10
+# Nvu = 70
+# Ns = 5
+# lr = 1e-2
+# q_frac = 0.8
+# f_name = "vdp"
+# mode = "expr"
+# Nvgs = [15]
+# zgran = [0.3]
+# ampgs = [2.0]
+# zuran = 2.0
+# rep = 1
+# mus = [2.0]
+# data_dir = "data"
+# preds_dir = "preds"
+
 keys = jrnd.split(jrnd.PRNGKey(rep), 5)
 
 # %%
@@ -144,6 +149,13 @@ for mu in mus:
     preds = model.sample([x_test], 50, key=keys[4])[0]
     pred_mean = jnp.mean(preds, axis=1)
     pred_var = jnp.var(preds, axis=1) + model.noise[0] ** 2
+
+    f_name = "rep" + str(rep) + "predictions.csv"
+    odir = Path(preds_dir + "/nvkm/nvkmC" + str(C) + "/mu" + str(mu).replace(".", ""))
+    odir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        {"x_test": x_test, "pred_mean": pred_mean, "pred_var": pred_var}
+    ).to_csv(odir / f_name)
 
     nmse = NMSE(pred_mean, y_test)
     nlpd = gaussian_NLPD(pred_mean, pred_var, y_test)
