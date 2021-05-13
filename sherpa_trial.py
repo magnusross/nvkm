@@ -1,112 +1,95 @@
 import sherpa
-from nvkm.models import MOVarNVKM
-from nvkm.utils import l2p, NMSE, make_zg_grids
-
-import matplotlib.pyplot as plt
-import jax.numpy as jnp
-import jax.random as jrnd
-import pandas as pd
-import argparse
-
-Nbatch = 50
-Nbasis = 30
-noise = 0.05
-Nits = 500
-Nvu = 100
-Ns = 5
-lr = 1e-2
-q_frac = 0.6
-f_name = "fx"
-data_dir = "data"
-Nvgs = [20]
-zgran = [0.75]
-ampgs = [5.0]
-zuran = 2.0
-key = 1
-
-keys = jrnd.split(jrnd.PRNGKey(key), 5)
 
 client = sherpa.Client()
 trial = client.get_trial()
-
-train_df = pd.read_csv(data_dir + "/fx/fx_train.csv", index_col=0)
-test_df = pd.read_csv(data_dir + "/fx/fx_test.csv", index_col=0)
-
-
-def make_data(df):
-    xs = []
-    ys = []
-    o_names = []
-    y_stds = []
-    y_means = []
-    x = jnp.array((df["year"] - df["year"].mean()) / df["year"].std())
-    for key in df.keys():
-        if key != "year":
-            print(key)
-            o_names.append(key)
-            yi = jnp.array(df[key])
-            xs.append(x[~jnp.isnan(yi)])
-            ysi = yi[~jnp.isnan(yi)]
-            ys.append((ysi - jnp.mean(ysi)) / jnp.std(ysi))
-            y_stds.append(jnp.std(ysi))
-            y_means.append(jnp.mean(ysi))
-
-    return (xs, ys), o_names, (y_means, y_stds), (df["year"].mean(), df["year"].std())
+# Model training
+num_iterations = 10
+for i in range(num_iterations):
+    pseudo_objective = (
+        trial.parameters["param_a"] / float(i + 1) * trial.parameters["param_b"]
+    )
+    client.send_metrics(trial=trial, iteration=i + 1, objective=pseudo_objective)
 
 
-train_data, o_names, y_mean_stds, x_meanstds = make_data(train_df)
+# import sherpa
+# from nvkm.models import MOVarNVKM
+# from nvkm.utils import l2p, NMSE, make_zg_grids, gaussian_NLPD
+# from nvkm.experiments import ExchangeDataSet, WeatherDataSet
 
-O = len(o_names)
-C = len(Nvgs)
-
-zu = jnp.linspace(-zuran, zuran, Nvu).reshape(-1, 1)
-lsu = zu[1][0] - zu[0][0]
-
-tgs, lsgs = make_zg_grids(zgran, Nvgs)
-
-
-# %%
-model = MOVarNVKM(
-    [tgs] * O,
-    zu,
-    train_data,
-    q_pars_init=None,
-    q_initializer_pars=q_frac,
-    q_init_key=keys[0],
-    lsgs=[lsgs] * O,
-    ampgs=[ampgs] * O,
-    noise=[noise] * O,
-    alpha=[[3 / (zgran[i]) ** 2 for i in range(C)]] * O,
-    lsu=lsu,
-    ampu=1.0,
-    N_basis=Nbasis,
-)
-
-model.fit(
-    Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
-)
-print(model.noise)
-print(model.ampu)
-print(model.lsu)
-print(model.ampgs)
-print(model.lsgs)
-
-train_preds = model.sample(train_data[0], 10)
-train_nmses
+# import matplotlib.pyplot as plt
+# import jax.numpy as jnp
+# import jax.random as jrnd
+# import pandas as pd
+# import argparse
 
 
-tt = [jnp.array([0.0])] * O
-for name in ["USD/CAD", "USD/JPY", "USD/AUD"]:
-    na = ~test_df[name].isna()
-    tt[o_names.index(name)] = (
-        jnp.array(test_df["year"][na]) - x_meanstds[0]
-    ) / x_meanstds[1]
+# client = sherpa.Client()
+# trial = client.get_trial()
 
-preds = model.sample(tt, 30, key=keys[4])
+# Nbatch = 50
+# Nbasis = 30
+# noise = trial.parameters["noise"]
+# Nits = 100
+# Nvu = 100
+# Ns = 5
+# lr = 1e-2
+# q_frac = 0.6
+# f_name = "fx"
+# data_dir = "data"
+# Nvgs = [20]
+# zgran = [trial.parameters["zgran"]]
+# ampgs = [5.0]
+# zuran = 2.0
+# key = 1
 
-nmset = 0.0
-for i, key in enumerate(["USD/CAD", "USD/JPY", "USD/AUD"]):
-    idx = o_names.index(key)
-    pi = preds[idx] * y_mean_stds[1][idx] + y_mean_stds[0][idx]
-    pred_mean = jnp.mean(pi, axis=1)
-    pred_std = jnp.std(pi, axis=1)
+# keys = jrnd.split(jrnd.PRNGKey(key), 5)
+
+# data = WeatherDataSet(data_dir)
+
+# O = len(data.output_names)
+# C = len(Nvgs)
+
+# zu = jnp.linspace(-zuran, zuran, Nvu).reshape(-1, 1)
+# lsu = zu[1][0] - zu[0][0]
+
+# tgs, lsgs = make_zg_grids(zgran, Nvgs)
+
+
+# model = MOVarNVKM(
+#     [tgs] * O,
+#     zu,
+#     (data.strain_x, data.strain_y),
+#     q_pars_init=None,
+#     q_initializer_pars=q_frac,
+#     q_init_key=keys[0],
+#     lsgs=[lsgs] * O,
+#     ampgs=[ampgs] * O,
+#     noise=[noise] * O,
+#     alpha=[[3 / (zgran[i]) ** 2 for i in range(C)]] * O,
+#     lsu=lsu,
+#     ampu=1.0,
+#     N_basis=Nbasis,
+# )
+
+# model.fit(
+#     Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
+# )
+
+
+# # print(model.noise)
+# # print(model.ampu)
+# # print(model.lsu)
+# # print(model.ampgs)
+# # print(model.lsgs)
+
+# train_preds = model.predict(data.strain_x, 10)
+# _, pred_mean = data.upscale(data.strain_x, train_preds[0])
+# _, pred_var = data.upscale(data.strain_x, train_preds[1])
+
+# train_total_nlpd = (
+#     sum([gaussian_NLPD(pred_mean[i], pred_var[i], data.train_y[i]) for i in range(O)])
+#     / O
+# )
+# train_total_nmse = sum([NMSE(pred_mean[i], data.train_y[i]) for i in range(O)]) / O
+
+# client.send_metrics(trial=trial, iteration=1, objective=train_total_nlpd)
