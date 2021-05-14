@@ -221,7 +221,6 @@ class ExchangeDataSet(MODataSet):
         for o in test_df.keys():
             if o != "year":
                 yi = jnp.array(test_df[o])
-                print(test_df)
                 xte[o_names.index(o)] = jnp.array(test_df["year"][~jnp.isnan(yi)])
                 yte[o_names.index(o)] = yi[~jnp.isnan(yi)]
 

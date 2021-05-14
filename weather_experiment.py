@@ -14,61 +14,62 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import argparse
 import copy
+import pickle
 
-parser = argparse.ArgumentParser(description="Weather MO experiment.")
-parser.add_argument("--Nvu", default=60, type=int)
-parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
-parser.add_argument("--zgrange", default=[0.25], nargs="+", type=float)
-parser.add_argument("--zurange", default=1.8, type=float)
-parser.add_argument("--Nits", default=1000, type=int)
-parser.add_argument("--lr", default=1e-3, type=float)
-parser.add_argument("--Nbatch", default=30, type=int)
-parser.add_argument("--Nbasis", default=30, type=int)
-parser.add_argument("--Ns", default=20, type=int)
-parser.add_argument("--ampgs", default=[5], nargs="+", type=float)
-parser.add_argument("--q_frac", default=0.5, type=float)
-parser.add_argument("--noise", default=0.1, type=float)
-parser.add_argument("--f_name", default="eeg", type=str)
-parser.add_argument("--data_dir", default="data", type=str)
-parser.add_argument("--key", default=1, type=int)
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="Weather MO experiment.")
+# parser.add_argument("--Nvu", default=60, type=int)
+# parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
+# parser.add_argument("--zgrange", default=[0.25], nargs="+", type=float)
+# parser.add_argument("--zurange", default=1.8, type=float)
+# parser.add_argument("--Nits", default=1000, type=int)
+# parser.add_argument("--lr", default=1e-3, type=float)
+# parser.add_argument("--Nbatch", default=30, type=int)
+# parser.add_argument("--Nbasis", default=30, type=int)
+# parser.add_argument("--Ns", default=20, type=int)
+# parser.add_argument("--ampgs", default=[5], nargs="+", type=float)
+# parser.add_argument("--q_frac", default=0.5, type=float)
+# parser.add_argument("--noise", default=0.1, type=float)
+# parser.add_argument("--f_name", default="eeg", type=str)
+# parser.add_argument("--data_dir", default="data", type=str)
+# parser.add_argument("--key", default=1, type=int)
+# args = parser.parse_args()
 
-Nbatch = args.Nbatch
-Nbasis = args.Nbasis
-noise = args.noise
-Nits = args.Nits
-Nvu = args.Nvu
-Nvgs = args.Nvgs
-zgran = args.zgrange
-zuran = args.zurange
-Ns = args.Ns
-lr = args.lr
-q_frac = args.q_frac
-f_name = args.f_name
-data_dir = args.data_dir
-ampgs = args.ampgs
-key = args.key
-print(args)
+# Nbatch = args.Nbatch
+# Nbasis = args.Nbasis
+# noise = args.noise
+# Nits = args.Nits
+# Nvu = args.Nvu
+# Nvgs = args.Nvgs
+# zgran = args.zgrange
+# zuran = args.zurange
+# Ns = args.Ns
+# lr = args.lr
+# q_frac = args.q_frac
+# f_name = args.f_name
+# data_dir = args.data_dir
+# ampgs = args.ampgs
+# key = args.key
+# print(args)
 
-# Nbatch = 50
-# Nbasis = 30
-# noise = 0.05
-# Nits = 500
-# Nvu = 140
-# Ns = 5
-# lr = 1e-2
-# q_frac = 0.5
-# f_name = "weather"
-# data_dir = "data"
-# Nvgs = [15, 8, 6]
-# zgran = [0.5, 0.2, 0.1]
-# zuran = 2.0
-# ampgs = [5.0, 5.0, 5.0]
-# key = 1
+Nbatch = 50
+Nbasis = 30
+noise = 0.05
+Nits = 500
+Nvu = 140
+Ns = 5
+lr = 1e-2
+q_frac = 0.5
+f_name = "plots/res_test/hey"
+data_dir = "data"
+Nvgs = [15, 8, 6]
+zgran = [0.5, 0.2, 0.1]
+zuran = 2.0
+ampgs = [5.0, 5.0, 5.0]
+key = 1
 
 
 data = WeatherDataSet(data_dir)
-keys = jrnd.split(jrnd.PRNGKey(key), 5)
+keys = jrnd.split(jrnd.PRNGKey(key), 6)
 # %%
 O = data.O
 C = len(Nvgs)
@@ -94,7 +95,15 @@ model = MOVarNVKM(
     N_basis=Nbasis,
 )
 #%%
-model.fit(Nits, 1e-3, Nbatch, Ns, dont_fit=["lsgs", "lsu", "noise"], key=keys[1])
+model.fit(Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise"], key=keys[1])
+model.fit(
+    int(Nits / 10),
+    lr,
+    Nbatch,
+    Ns,
+    dont_fit=["q_pars", "ampgs", "lsgs", "ampu", "lsu"],
+    key=keys[5],
+)
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -112,16 +121,29 @@ axs = model.plot_samples(
 )
 axs[2].scatter(data.stest_x[1], data.stest_y[1], c="red", alpha=0.3)
 axs[3].scatter(data.stest_x[2], data.stest_y[2], c="red", alpha=0.3)
-plt.savefig(f_name + "fit_samples.pdf")
+plt.savefig(f_name + "samples.pdf")
 plt.show()
 
 #%%
 model.plot_filters(
     jnp.linspace(-max(zgran), max(zgran), 60),
     10,
-    save=f_name + "fit_filters.pdf",
+    save=f_name + "filters.pdf",
     key=keys[3],
 )
+
+train_spreds = model.predict(data.strain_x, 5, key=keys[4])
+_, train_pred_mean = data.upscale(data.strain_x, train_spreds[0])
+_, train_pred_var = data.upscale(data.strain_x, train_spreds[1])
+
+train_nmse = sum([NMSE(train_pred_mean[i], data.train_y[i]) for i in range(O)])
+train_nlpd = sum(
+    [
+        gaussian_NLPD(train_pred_mean[i], train_pred_var[i], data.train_y[i])
+        for i in range(O)
+    ]
+)
+
 #%%
 spreds = model.predict(data.stest_x, 5, key=keys[4])
 _, pred_mean = data.upscale(data.stest_x, spreds[0])
@@ -151,3 +173,18 @@ print(f"Cambermet NLPD: {gaussian_NLPD(pred_mean[1], pred_var[1], data.test_y[1]
 print(f"Chimet NLPD: {gaussian_NLPD(pred_mean[2], pred_var[2], data.test_y[2]):.2f}")
 
 # %%
+test_nmse = sum([NMSE(pred_mean[i], data.test_y[i]) for i in range(O)])
+test_nlpd = sum(
+    [gaussian_NLPD(pred_mean[i], pred_var[i], data.test_y[i]) for i in range(O)]
+)
+
+with open(f_name + "res.pkl", "wb") as f:
+    pickle.dump(
+        {
+            "test NMSE": test_nmse,
+            "train NMSE": train_nmse,
+            "test NLPD": test_nlpd,
+            "train NLPD": train_nlpd,
+        },
+        f,
+    )

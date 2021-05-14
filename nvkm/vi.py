@@ -119,8 +119,7 @@ class MOIndependentGaussians(BaseGaussain):
         #     [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
         # ]
         q_pars["LC_gs"] = [
-            [jnp.eye(len(arr)) * frac for arr in model.p_pars["LK_gs"][i]]
-            for i in range(model.O)
+            [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
         ]
         q_pars["LC_u"] = frac * model.p_pars["LK_u"]
         q_pars["mu_gs"] = []
@@ -173,6 +172,5 @@ def gaussain_likelihood(y, samples, noise):
     gaussian likelihood
     """
     Nt = samples.shape[1]
-    Ns = samples.shape[0]
     C = -0.5 * Nt * jnp.log(2 * jnp.pi * noise ** 2)
-    return C - (1 / Ns) * (1 / (2 * noise ** 2)) * jnp.sum((y - samples.T) ** 2)
+    return jnp.mean(C - (1 / (2 * noise ** 2)) * jnp.sum((y - samples.T) ** 2, axis=0))

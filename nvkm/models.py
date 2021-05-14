@@ -332,6 +332,8 @@ class MOVarNVKM:
         self.ampgs = ampgs
         self.ampu = ampu
 
+        self.opt_triple = None
+
         self.g_gps = self.set_G_gps(ampgs, lsgs)
         self.u_gp = self.set_u_gp(ampu, lsu)
 
@@ -511,11 +513,127 @@ class MOVarNVKM:
             key,
         )
 
+    def em_fit(
+        self,
+        its,
+        lr,
+        batch_size,
+        N_s,
+        e_size=50,
+        m_size=50,
+        dont_fit=[],
+        key=jrnd.PRNGKey(1),
+    ):
+        xs, ys = self.data
+        std_fit = ["ampgs", "lsgs", "ampu", "lsu", "noise"]
+        std_argnums = list(range(2, 7))
+        dpars_init = []
+        dpars_argnum = []
+        bound_arg = [0.0] * len(std_fit)
+        for i, k in enumerate(std_fit):
+            if k not in dont_fit:
+                dpars_init.append(getattr(self, k))
+                dpars_argnum.append(std_argnums[i])
+            bound_arg[i] = getattr(self, k)
+
+        m_grad_fn = jit(
+            value_and_grad(self._compute_bound, argnums=dpars_argnum),
+            static_argnums=(7,),
+        )
+
+        e_grad_fn = jit(
+            value_and_grad(self._compute_bound, argnums=1), static_argnums=(7,)
+        )
+
+        m_opt_init, m_opt_update, m_get_params = opt.adam(lr)
+        e_opt_init, e_opt_update, e_get_params = opt.adam(lr)
+
+        m_opt_state = m_opt_init(tuple(dpars_init))
+        e_opt_state = e_opt_init(self.q_pars)
+        q_pars = self.q_pars
+        e_steps = 0
+        m_steps = 1
+        ei_steps = 0
+        mi_steps = 0
+        for i in range(its):
+            skey, key = jrnd.split(key, 2)
+            y_bs = []
+            x_bs = []
+            for j in range(self.O):
+                skey, key = jrnd.split(key, 2)
+
+                if batch_size:
+                    rnd_idx = jrnd.choice(key, len(ys[j]), shape=(batch_size,))
+                    y_bs.append(ys[j][rnd_idx])
+                    x_bs.append(xs[j][rnd_idx])
+                else:
+                    y_bs.append(ys[j])
+                    x_bs.append(xs[j])
+
+            if e_steps < m_steps:
+                grad_fn, opt_state, opt_update, get_params = (
+                    e_grad_fn,
+                    e_opt_state,
+                    e_opt_update,
+                    e_get_params,
+                )
+
+                q_pars = get_params(opt_state)
+
+            else:
+                grad_fn, opt_state, opt_update, get_params = (
+                    m_grad_fn,
+                    m_opt_state,
+                    m_opt_update,
+                    m_get_params,
+                )
+
+                for k, ix in enumerate(dpars_argnum):
+                    bound_arg[ix - 2] = get_params(opt_state)[k]
+
+            value, grads = grad_fn((x_bs, y_bs), q_pars, *bound_arg, N_s, skey,)
+
+            if jnp.any(jnp.isnan(value)):
+                print("nan F!!")
+                return get_params(opt_state)
+
+            if i % 10 == 0:
+                print(f"it: {i} F: {value} ")
+                print("noisevar: %.2f" % bound_arg[-1][0])
+                # print("qp:" + str(jnp.max(q_pars["mu_u"])))
+            opt_state = opt_update(i, grads, opt_state)
+
+            if e_steps < m_steps:
+                e_opt_state = opt_state
+                ei_steps += 1
+                if ei_steps >= e_size:
+                    print("M step")
+                    e_steps += 1
+                    ei_steps = 0
+            else:
+                m_opt_state = opt_state
+                mi_steps += 1
+                if mi_steps >= m_size:
+                    print("E step")
+                    m_steps += 1
+                    mi_steps = 0
+
+        for i, ix in enumerate(dpars_argnum):
+            bound_arg[ix - 2] = m_get_params(m_opt_state)[i]
+
+        q_pars = e_get_params(e_opt_state)
+
+        for i, k in enumerate(std_fit):
+            setattr(self, k, bound_arg[i])
+
+        self.q_pars = q_pars
+        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
+        self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
+        self.u_gp = self.set_u_gp(self.ampu, self.lsu)
+
     def fit(self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1)):
 
         xs, ys = self.data
-
-        opt_init, opt_update, get_params = opt.adam(lr)
 
         std_fit = ["q_pars", "ampgs", "lsgs", "ampu", "lsu", "noise"]
         std_argnums = list(range(1, 7))
@@ -532,6 +650,11 @@ class MOVarNVKM:
             value_and_grad(self._compute_bound, argnums=dpars_argnum),
             static_argnums=(7,),
         )
+
+        # if self.opt_triple is None:
+        opt_init, opt_update, get_params = opt.adam(lr)
+        # else:
+        #     opt_init, opt_update, get_params = self.opt_triple
 
         opt_state = opt_init(tuple(dpars_init))
 
@@ -569,6 +692,7 @@ class MOVarNVKM:
         for i, k in enumerate(std_fit):
             setattr(self, k, bound_arg[i])
 
+        # self.opt_triple = opt_init, opt_update, get_params
         self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
         self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
         self.u_gp = self.set_u_gp(self.ampu, self.lsu)
