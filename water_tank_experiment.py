@@ -10,6 +10,7 @@ import jax.random as jrnd
 import matplotlib.pyplot as plt
 import pandas as pd
 import argparse
+import pickle
 
 parser = argparse.ArgumentParser(description="Water tank IO experiment.")
 parser.add_argument("--Nvu", default=150, type=int)
@@ -65,7 +66,7 @@ print(args)
 
 
 # print(args)
-keys = jrnd.split(jrnd.PRNGKey(key), 6)
+keys = jrnd.split(jrnd.PRNGKey(key), 7)
 
 #%%
 data = pd.read_csv(data_dir + "/water_tanks.csv")
@@ -87,14 +88,6 @@ ytest = (
     [tt + t_offset * jnp.ones(len(data))],
     [jnp.array((data["yVal"] - y_mean) / y_std)],
 )
-
-# plt.plot(*utrain)
-# plt.plot(ytrain[0][0], ytrain[1][0])
-# plt.show()
-# plt.plot(*utest)
-# plt.plot(ytest[0][0], ytest[1][0])
-# plt.show()
-
 
 udata = (jnp.hstack((utrain[0], utest[0])), jnp.hstack((utrain[1], utest[1])))
 
@@ -130,19 +123,13 @@ modelc2 = IOMOVarNVKM(
 #%%
 # 5e-4
 modelc2.fit(
-    Nits,
-    lr,
-    Nbatch,
-    Ns,
-    dont_fit=["lsgs", "lsu", "ampu", "noise", "u_noise"],
-    key=keys[1],
+    Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"], key=keys[1],
 )
 print(modelc2.noise)
 print(modelc2.ampu)
 print(modelc2.lsu)
 print(modelc2.ampgs)
 print(modelc2.lsgs)
-modelc2.save(f_name + "tank_model.pkl")
 # %%
 tp_train = jnp.linspace(-zuran, zuran, 400)
 tp_test = tp_train + t_offset
@@ -160,7 +147,7 @@ plt.savefig(f_name + "samps_test.pdf")
 #%%
 
 p_samps = modelc2.sample(ytest[0], 50, key=keys[4])
-p_samps_tr = modelc2.sample(ytrain[0], 50, key=keys[4])
+p_samps_tr = modelc2.sample(ytrain[0], 50, key=keys[5])
 #%%
 scaled_samps = p_samps[0] * y_std + y_mean
 pred_mean = jnp.mean(scaled_samps, axis=1)
@@ -183,6 +170,18 @@ print("Train NLPD: %.3f" % nlpd_tr)
 
 print("RMSE: %.3f" % rmse)
 print("NLPD: %.3f" % nlpd)
+
+res = res = {
+    "test NMSE": rmse,
+    "train NMSE": rmse_tr,
+    "test NLPD": nlpd,
+    "train NLPD": nlpd_tr,
+}
+
+print(res)
+with open(f_name + "res.pkl", "wb") as f:
+    pickle.dump(res, f)
+
 #%%
 fig = plt.figure(figsize=(12, 4))
 plt.plot(data["Ts"], data["yVal"], c="black", ls=":", label="Val. Data")
@@ -204,7 +203,5 @@ plt.savefig(f_name + "main.pdf")
 plt.show()
 #%%
 tf = jnp.linspace(-max(zgran), max(zgran), 100)
-modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf", key=keys[5])
-
-
+modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf", key=keys[6])
 # %%
