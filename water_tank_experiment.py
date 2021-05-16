@@ -171,7 +171,7 @@ print("Train NLPD: %.3f" % nlpd_tr)
 print("RMSE: %.3f" % rmse)
 print("NLPD: %.3f" % nlpd)
 
-res = res = {
+res = {
     "test NMSE": rmse,
     "train NMSE": rmse_tr,
     "test NLPD": nlpd,

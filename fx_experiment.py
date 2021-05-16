@@ -1,12 +1,13 @@
 #%%
 from nvkm.models import MOVarNVKM
-from nvkm.utils import l2p, NMSE, make_zg_grids
-
+from nvkm.utils import l2p, NMSE, make_zg_grids, gaussian_NLPD
+from nvkm.experiments import ExchangeDataSet
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
 import jax.random as jrnd
 import pandas as pd
 import argparse
+import pickle
 
 parser = argparse.ArgumentParser(description="FX MO experiment.")
 parser.add_argument("--Nvu", default=60, type=int)
@@ -60,40 +61,10 @@ print(args)
 # key = 1
 
 keys = jrnd.split(jrnd.PRNGKey(key), 5)
-#%%
-train_df = pd.read_csv(data_dir + "/fx/fx_train.csv", index_col=0)
-test_df = pd.read_csv(data_dir + "/fx/fx_test.csv", index_col=0)
 
-# df.to_csv("data/fx.csv")
-# train_df["year"] = train_df.index
-# test_df["year"] = test_df["year"]
-
-
-def make_data(df):
-    xs = []
-    ys = []
-    o_names = []
-    y_stds = []
-    y_means = []
-    x = jnp.array((df["year"] - df["year"].mean()) / df["year"].std())
-    for key in df.keys():
-        if key != "year":
-            print(key)
-            o_names.append(key)
-            yi = jnp.array(df[key])
-            xs.append(x[~jnp.isnan(yi)])
-            ysi = yi[~jnp.isnan(yi)]
-            ys.append((ysi - jnp.mean(ysi)) / jnp.std(ysi))
-            y_stds.append(jnp.std(ysi))
-            y_means.append(jnp.mean(ysi))
-
-    return (xs, ys), o_names, (y_means, y_stds), (df["year"].mean(), df["year"].std())
-
-
-train_data, o_names, y_mean_stds, x_meanstds = make_data(train_df)
-
+data = ExchangeDataSet(data_dir)
 # %%
-O = len(o_names)
+O = data.O
 C = len(Nvgs)
 
 zu = jnp.linspace(-zuran, zuran, Nvu).reshape(-1, 1)
@@ -106,7 +77,7 @@ tgs, lsgs = make_zg_grids(zgran, Nvgs)
 model = MOVarNVKM(
     [tgs] * O,
     zu,
-    train_data,
+    (data.strain_x, data.strain_y),
     q_pars_init=None,
     q_initializer_pars=q_frac,
     q_init_key=keys[0],
@@ -122,6 +93,14 @@ model = MOVarNVKM(
 model.fit(
     Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[1],
 )
+model.fit(
+    int(Nits / 10),
+    lr,
+    Nbatch,
+    Ns,
+    dont_fit=["q_pars", "ampgs", "lsgs", "ampu", "lsu"],
+    key=keys[5],
+)
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -136,14 +115,9 @@ axs = model.plot_samples(
     key=keys[2],
 )
 for name in ["USD/CAD", "USD/JPY", "USD/AUD"]:
-    na = ~test_df[name].isna()
-    idx = o_names.index(name)
+    idx = data.output_names.index(name)
     axs[idx + 1].scatter(
-        (jnp.array(test_df["year"][na]) - x_meanstds[0]) / x_meanstds[1],
-        (test_df[name][na] - y_mean_stds[0][idx]) / y_mean_stds[1][idx],
-        c="red",
-        s=5.0,
-        alpha=0.3,
+        data.stest_x[idx], data.stest_y[idx], c="red", s=5.0, alpha=0.3
     )
 plt.savefig(f_name + "fit_samples.pdf")
 plt.show()
@@ -155,46 +129,80 @@ model.plot_filters(
     save=f_name + "fit_filters.pdf",
     key=keys[3],
 )
-# %%
-tt = [jnp.array([0.0])] * O
-for name in ["USD/CAD", "USD/JPY", "USD/AUD"]:
-    na = ~test_df[name].isna()
-    tt[o_names.index(name)] = (
-        jnp.array(test_df["year"][na]) - x_meanstds[0]
-    ) / x_meanstds[1]
+#%%
 
-preds = model.sample(tt, 30, key=keys[4])
+spreds = model.predict(data.stest_x, 5, key=keys[4])
+_, pred_mean = data.upscale(data.stest_x, spreds[0])
+pred_var = data.upscale_variance(spreds[1])
+
+train_spreds = model.predict(data.strain_x, 5, key=keys[5])
+_, train_pred_mean = data.upscale(data.strain_x, train_spreds[0])
+train_pred_var = data.upscale_variance(train_spreds[1])
+
+train_nmse = sum([NMSE(train_pred_mean[i], data.train_y[i]) for i in range(O)])
+train_nlpd = sum(
+    [
+        gaussian_NLPD(train_pred_mean[i], train_pred_var[i], data.train_y[i])
+        for i in range(O)
+    ]
+)
+
+test_nmse = sum(
+    [
+        NMSE(
+            pred_mean[data.output_names.index(n)],
+            data.test_y[data.output_names.index(n)],
+        )
+        for n in ["USD/CAD", "USD/JPY", "USD/AUD"]
+    ]
+)
+test_nlpd = sum(
+    [
+        gaussian_NLPD(
+            pred_mean[data.output_names.index(n)],
+            pred_var[data.output_names.index(n)],
+            data.test_y[data.output_names.index(n)],
+        )
+        for n in ["USD/CAD", "USD/JPY", "USD/AUD"]
+    ]
+)
+res = {
+    "test NMSE": test_nmse,
+    "train NMSE": train_nmse,
+    "test NLPD": test_nlpd,
+    "train NLPD": train_nlpd,
+}
+print(res)
+
+with open(f_name + "res.pkl", "wb") as f:
+    pickle.dump(res, f)
+
 #%%
 fig, axs = plt.subplots(1, 3, figsize=(10, 3))
 nmset = 0.0
 for i, key in enumerate(["USD/CAD", "USD/JPY", "USD/AUD"]):
-    idx = o_names.index(key)
-    pi = preds[idx] * y_mean_stds[1][idx] + y_mean_stds[0][idx]
-    pred_mean = jnp.mean(pi, axis=1)
-    pred_std = jnp.std(pi, axis=1)
-    y_true = jnp.array(test_df[key][~test_df[key].isna()])
+    idx = data.output_names.index(key)
+    pmi = pred_mean[idx]
+    psi = pred_var[idx]
 
-    year = test_df["year"][~test_df[name].isna()]
-    axs[i].plot(year, pred_mean, c="green", label="Pred. Mean")
+    axs[i].plot(data.test_x[idx], pmi, c="green", label="Pred. Mean")
     axs[i].fill_between(
-        year,
-        pred_mean + 2 * pred_std,
-        pred_mean - 2 * pred_std,
+        data.test_x[idx],
+        pmi - 2 * jnp.sqrt(psi),
+        pmi + 2 * jnp.sqrt(psi),
         alpha=0.1,
         color="green",
         label="$\pm 2 \sigma$",
     )
-    axs[i].plot(year, y_true, c="black", ls=":", label="Val. Data")
-    axs[i].set_ylabel(key + " (V)")
-    axs[i].set_xlabel(" Time (s)")
-    nmse = NMSE(pred_mean, y_true)
-    nmset += nmse
-    print(key + f" NMSE: {nmse:.3f}")
-plt.tight_layout()
+    axs[i].plot(
+        data.test_x[idx], data.test_y[idx], c="black", ls=":", label="Val. Data"
+    )
+    axs[i].set_ylabel(key)
+    axs[i].set_xlabel(" Time (years)")
+
 axs[0].legend()
 plt.tight_layout()
 plt.savefig(f_name + "main.pdf")
 plt.show()
-print(f"Total SMSE: {nmset/3:.3f}")
 # %%
 

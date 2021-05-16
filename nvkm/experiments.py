@@ -141,6 +141,14 @@ class MODataSet:
         ]
         return xo, yo
 
+    def upscale_variance(self, var):
+
+        varo = [
+            vi * self.y_scales[i][1] ** 2 if vi is not None else vi
+            for i, vi in enumerate(var)
+        ]
+        return varo
+
 
 class WeatherDataSet(MODataSet):
     def __init__(self, data_dir):
