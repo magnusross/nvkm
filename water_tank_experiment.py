@@ -48,13 +48,13 @@ ampgs = args.ampgs
 key = args.key
 print(args)
 # data_dir = "data"
-# Nits = 200
+# Nits = 1000
 # Nbatch = 30
-# lr = 1e-2
+# lr = 5e-3
 # q_frac = 0.55
 # f_name = "dev"
-# Nvgs = [15, 8]
-# zgran = [0.3, 0.2]
+# Nvgs = [15]
+# zgran = [0.3]
 # a = 6.0
 # ampgs = [a, a, a]
 # zuran = 2.0
@@ -125,6 +125,14 @@ modelc2 = IOMOVarNVKM(
 modelc2.fit(
     Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"], key=keys[1],
 )
+modelc2.fit(
+    int(Nits / 10),
+    lr,
+    Nbatch,
+    Ns,
+    dont_fit=["q_pars", "ampgs", "lsgs", "ampu", "lsu"],
+    key=keys[2],
+)
 print(modelc2.noise)
 print(modelc2.ampu)
 print(modelc2.lsu)
@@ -147,23 +155,37 @@ plt.savefig(f_name + "samps_test.pdf")
 #%%
 
 p_samps = modelc2.sample(ytest[0], 50, key=keys[4])
-p_samps_tr = modelc2.sample(ytrain[0], 50, key=keys[5])
+u_samps_tr, p_samps_tr = modelc2.joint_sample(utrain[0], ytrain[0], 50, key=keys[5])
+
+
 #%%
 scaled_samps = p_samps[0] * y_std + y_mean
 pred_mean = jnp.mean(scaled_samps, axis=1)
 pred_std = jnp.std(scaled_samps, axis=1)
-pred_var = pred_std ** 2 + modelc2.noise[0] ** 2
+pred_var = pred_std ** 2 + y_std ** 2 * modelc2.noise[0] ** 2
 
 scaled_samps_tr = p_samps_tr[0] * y_std + y_mean
 pred_mean_tr = jnp.mean(scaled_samps_tr, axis=1)
 pred_std_tr = jnp.std(scaled_samps_tr, axis=1)
-pred_var_tr = pred_std_tr ** 2 + modelc2.noise[0] ** 2
+pred_var_tr = pred_std_tr ** 2 + y_std ** 2 * modelc2.noise[0] ** 2
+
+u_scaled_samps_tr = u_samps_tr * u_std + u_mean
+u_pred_mean_tr = jnp.mean(u_scaled_samps_tr, axis=1)
+u_pred_std_tr = jnp.std(u_scaled_samps_tr, axis=1)
+u_pred_var_tr = u_pred_std_tr ** 2 + u_std ** 2 * modelc2.u_noise ** 2
+
 
 rmse = RMSE(pred_mean, jnp.array(data["yVal"]))
 nlpd = gaussian_NLPD(pred_mean, pred_var, jnp.array(data["yVal"]))
 
-rmse_tr = RMSE(pred_mean_tr, jnp.array(data["yEst"]))
-nlpd_tr = gaussian_NLPD(pred_mean_tr, pred_var_tr, jnp.array(data["yEst"]))
+rmse_tr = (
+    RMSE(pred_mean_tr, jnp.array(data["yEst"]))
+    + RMSE(u_pred_mean_tr, jnp.array(data["uEst"]))
+) / 2
+nlpd_tr = (
+    gaussian_NLPD(pred_mean_tr, pred_var_tr, jnp.array(data["yEst"]))
+    + gaussian_NLPD(u_pred_mean_tr, u_pred_var_tr, jnp.array(data["uEst"]))
+) / 2
 #%%
 print("Train RMSE: %.3f" % rmse_tr)
 print("Train NLPD: %.3f" % nlpd_tr)

@@ -147,24 +147,30 @@ train_nlpd = sum(
     ]
 )
 
-test_nmse = sum(
-    [
-        NMSE(
-            pred_mean[data.output_names.index(n)],
-            data.test_y[data.output_names.index(n)],
-        )
-        for n in ["USD/CAD", "USD/JPY", "USD/AUD"]
-    ]
+test_nmse = (
+    sum(
+        [
+            NMSE(
+                pred_mean[data.output_names.index(n)],
+                data.test_y[data.output_names.index(n)],
+            )
+            for n in ["USD/CAD", "USD/JPY", "USD/AUD"]
+        ]
+    )
+    / 3
 )
-test_nlpd = sum(
-    [
-        gaussian_NLPD(
-            pred_mean[data.output_names.index(n)],
-            pred_var[data.output_names.index(n)],
-            data.test_y[data.output_names.index(n)],
-        )
-        for n in ["USD/CAD", "USD/JPY", "USD/AUD"]
-    ]
+test_nlpd = (
+    sum(
+        [
+            gaussian_NLPD(
+                pred_mean[data.output_names.index(n)],
+                pred_var[data.output_names.index(n)],
+                data.test_y[data.output_names.index(n)],
+            )
+            for n in ["USD/CAD", "USD/JPY", "USD/AUD"]
+        ]
+    )
+    / 3
 )
 res = {
     "test NMSE": test_nmse,
