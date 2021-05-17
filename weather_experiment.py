@@ -136,12 +136,15 @@ train_spreds = model.predict(data.strain_x, 50, key=keys[4])
 _, train_pred_mean = data.upscale(data.strain_x, train_spreds[0])
 train_pred_var = data.upscale_variance(train_spreds[1])
 
-train_nmse = sum([NMSE(train_pred_mean[i], data.train_y[i]) for i in range(O)])
-train_nlpd = sum(
-    [
-        gaussian_NLPD(train_pred_mean[i], train_pred_var[i], data.train_y[i])
-        for i in range(O)
-    ]
+train_nmse = sum([NMSE(train_pred_mean[i], data.train_y[i]) for i in range(O)]) / 2
+train_nlpd = (
+    sum(
+        [
+            gaussian_NLPD(train_pred_mean[i], train_pred_var[i], data.train_y[i])
+            for i in range(O)
+        ]
+    )
+    / 2
 )
 
 #%%
@@ -173,9 +176,10 @@ print(f"Cambermet NLPD: {gaussian_NLPD(pred_mean[1], pred_var[1], data.test_y[1]
 print(f"Chimet NLPD: {gaussian_NLPD(pred_mean[2], pred_var[2], data.test_y[2]):.2f}")
 
 # %%
-test_nmse = sum([NMSE(pred_mean[i], data.test_y[i]) for i in range(1, 3)])
-test_nlpd = sum(
-    [gaussian_NLPD(pred_mean[i], pred_var[i], data.test_y[i]) for i in range(1, 3)]
+test_nmse = sum([NMSE(pred_mean[i], data.test_y[i]) for i in range(1, 3)]) / 2
+test_nlpd = (
+    sum([gaussian_NLPD(pred_mean[i], pred_var[i], data.test_y[i]) for i in range(1, 3)])
+    / 2
 )
 
 res = {
