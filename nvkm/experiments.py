@@ -3,6 +3,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import jax.random as jrnd
+from jax import jit
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy as osp
@@ -72,6 +73,60 @@ def generate_vdp_data(
             )
 
 
+def generate_duffing_data(
+    path="/Users/magnus/Documents/phd/code/repos/nvkm/data/duffing",
+):
+    keys = jrnd.split(jrnd.PRNGKey(0), 5)
+    for i in range(10):
+        gp1D = EQApproxGP(
+            z=None, v=None, amp=1.0, ls=2.0, noise=0.0001, N_basis=50, D=1
+        )
+
+        @jit
+        def gp_forcing(t):
+            return gp1D.sample(t, 1, key=keys[0]).flatten()
+
+        def duffing(t, z, a=1, b=-1, c=1.0):
+            x, y = z
+            # y = dx/dt
+            return [y, -a * y - b * x - c * x ** 3 + gp_forcing(t)]
+
+        N = 500
+
+        t = jnp.linspace(0, 100, N)
+        sol = osp.integrate.solve_ivp(duffing, [0, 100], [0.0, 0.0], t_eval=t)
+
+        y = sol.y[0]
+        x = (t - jnp.mean(t)) / jnp.std(t)
+        y = (y - jnp.mean(y)) / jnp.std(y) + 0.1 * jrnd.normal(keys[3], (N,))
+
+        plt.show()
+
+        N_te = 40
+        N_te_rand = 300
+        txs = jrnd.randint(keys[1], (1,), minval=0, maxval=N)
+
+        all_idx = jnp.arange(N)
+        t_idx_imp = jnp.arange(txs, N_te + txs)
+        t_idx_rand = jnp.sort(
+            jrnd.choice(keys[2], all_idx[~jnp.isin(all_idx, t_idx_imp)], (N_te_rand,))
+        )
+        t_idx = jnp.hstack((t_idx_imp, t_idx_rand))
+
+        x_test, y_test = x[t_idx], y[t_idx]
+        train_idx = ~jnp.isin(all_idx, t_idx)
+        x_train, y_train = x[train_idx], y[train_idx]
+
+        pd.DataFrame({"x_train": x_train, "y_train": y_train}).to_csv(
+            path + "/rep" + str(i) + "train.csv"
+        )
+        pd.DataFrame({"x_test": x_test, "y_test": y_test}).to_csv(
+            path + "/rep" + str(i) + "test.csv"
+        )
+        print(keys)
+        keys = jrnd.split(keys[4], 5)
+
+
 def load_vdp_data(mu, rep, data_dir="data"):
     path = data_dir + "/vdp" + "/mu" + str(mu).replace(".", "") + "/rep" + str(rep)
     tr_df = pd.read_csv(path + "train.csv")
@@ -84,12 +139,16 @@ def load_vdp_data(mu, rep, data_dir="data"):
     )
 
 
-# class WeatherData:
-#     def __init__(self, data_dir):
-#         self.data_dir = data_dir
-#         self.ma
-
-#     def load_data(self):
+def load_duffing_data(rep, data_dir="data"):
+    path = data_dir + "/duffing/rep" + str(rep)
+    tr_df = pd.read_csv(path + "train.csv")
+    te_df = pd.read_csv(path + "test.csv")
+    return (
+        jnp.array(tr_df["x_train"]),
+        jnp.array(tr_df["y_train"]),
+        jnp.array(te_df["x_test"]),
+        jnp.array(te_df["y_test"]),
+    )
 
 
 class MODataSet:
@@ -233,3 +292,53 @@ class ExchangeDataSet(MODataSet):
                 yte[o_names.index(o)] = yi[~jnp.isnan(yi)]
 
         self.test_x, self.test_y = xte, yte
+
+    # # def vdp(t, z):
+    # #     x, y = z
+    # #     return [y, -4 * y - x + gp_forcing(t) ** p]
+
+    # # def vdp(t, z):
+    # #     x, y = z
+    # #     return [y, mu * (1 - x ** 2) * y - x + gp_forcing(t) ** 3]
+
+    # # def vdp(t, z):
+    # #     x, y = z
+    # #     # y = dx/dt
+    # #     return [y, -y - x + 10.0*jnp.cos(x/2) ** 2 + 0.1*gp_forcing(t)]
+
+    # @jit
+    # def G1(x, a=1.0, b=1.0, alpha=1.0):
+    #     return jnp.exp(-alpha * x ** 2) * (jnp.sin(2 * x))
+
+    # @jit
+    # def G2(x, a=1.0, b=1.0, alpha=1.0):
+    #     return jnp.exp(-alpha * x ** 2) * (-jnp.sin(2.0 * x) ** 2 + x / 2)
+
+    # @jit
+    # def G3(x, a=1.0, b=1.0, alpha=1.0):
+    #     return jnp.exp(-alpha * x ** 2) * (-jnp.cos(3.0 * x))
+
+    # @partial(jit, static_argnums=(1, 2, 3))
+    # def trapz_int(t, h, x, N, dim=1, decay=4):
+    #     tau = jnp.linspace(t - decay, t + decay, N)
+    #     ht = h(t - tau)
+    #     xt = x(tau)
+    #     return jnp.trapz(ht * xt, x=tau, axis=0)
+
+    # N = 500
+    # xu = jnp.linspace(-20, 20, N)
+    # Nint = 100
+
+    # fyc1 = jit(lambda x: trapz_int(x, G1, gp_forcing, Nint, decay=2.0))
+    # yc1 = vmap(fyc1)(xu)
+    # fyc2a = jit(lambda x: trapz_int(x, G2, gp_forcing, Nint, decay=2.0))
+    # fyc2b = jit(lambda x: trapz_int(x, G1, gp_forcing, Nint, decay=2.0))
+
+    # fyc3 = jit(lambda x: trapz_int(x, G3, gp_forcing, Nint, decay=2.0))
+
+    # yc2 = vmap(fyc2a)(xu) * vmap(fyc2b)(xu)
+    # yc3 = vmap(fyc2a)(xu) * vmap(fyc2b)(xu) * vmap(fyc3)(xu)
+    # y = yc1 + yc2
+
+    # u = jnp.array([gp_forcing(ti) for ti in t])
+    # u = (u - jnp.mean(u)) / jnp.std(u)
