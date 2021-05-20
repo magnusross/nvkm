@@ -139,11 +139,11 @@ model.plot_filters(
     key=keys[3],
 )
 # %%
-pred_mean, pred_var = model.predict(x_test, 5, key=keys[4])
+pred_mean, pred_var = model.predict(x_test, 50, key=keys[4])
 
-test_nmse = sum([NMSE(pred_mean[i], y_test[i]) for i in range(3)]) / 3
+test_nmse = sum([NMSE(pred_mean[i], y_test[i]) for i in range(2)]) / 2
 test_nlpd = (
-    sum([gaussian_NLPD(pred_mean[i], pred_var[i], y_test[i]) for i in range(3)]) / 2
+    sum([gaussian_NLPD(pred_mean[i], pred_var[i], y_test[i]) for i in range(2)]) / 2
 )
 res = {
     "test NMSE": test_nmse,

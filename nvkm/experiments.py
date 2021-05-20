@@ -213,10 +213,10 @@ def load_mo_duffing_data(rep, data_dir="data"):
     path = data_dir + "/mo_duffing/rep" + str(rep)
     tr_df = pd.read_csv(path + "train.csv")
     te_df = pd.read_csv(path + "test.csv")
-    x_train = [jnp.array(tr_df[f"x{i}_train"]) for i in range(3)]
-    y_train = [jnp.array(tr_df[f"y{i}_train"]) for i in range(3)]
-    x_test = [jnp.array(te_df[f"x{i}_test"]) for i in range(3)]
-    y_test = [jnp.array(te_df[f"y{i}_test"]) for i in range(3)]
+    x_train = [jnp.array(tr_df[f"x{i}_train"]) for i in range(1, 3)]
+    y_train = [jnp.array(tr_df[f"y{i}_train"]) for i in range(1, 3)]
+    x_test = [jnp.array(te_df[f"x{i}_test"]) for i in range(1, 3)]
+    y_test = [jnp.array(te_df[f"y{i}_test"]) for i in range(1, 3)]
     return (
         x_train,
         y_train,

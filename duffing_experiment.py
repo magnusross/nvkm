@@ -18,69 +18,69 @@ from pathlib import Path
 #%%
 
 
-parser = argparse.ArgumentParser(description="Duffing experiment.")
-parser.add_argument("--Nvu", default=70, type=int)
-parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
-parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
-parser.add_argument("--zurange", default=2.0, type=float)
-parser.add_argument("--Nits", default=1000, type=int)
-parser.add_argument("--lr", default=1e-2, type=float)
-parser.add_argument("--Nbatch", default=30, type=int)
-parser.add_argument("--Nbasis", default=30, type=int)
-parser.add_argument("--Ns", default=5, type=int)
-parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
-parser.add_argument("--q_frac", default=0.7, type=float)
-parser.add_argument("--noise", default=0.1, type=float)
-parser.add_argument("--f_name", default="vdp", type=str)
-parser.add_argument("--mode", default="expr", type=str)
-parser.add_argument("--rep", default=0, type=int)
-parser.add_argument("--mus", default=[2.0, 1.0, 0.1, 0.0], nargs="+", type=float)
-parser.add_argument("--data_dir", default="data", type=str)
-parser.add_argument("--preds_dir", default="preds", type=str)
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="Duffing experiment.")
+# parser.add_argument("--Nvu", default=70, type=int)
+# parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
+# parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
+# parser.add_argument("--zurange", default=2.0, type=float)
+# parser.add_argument("--Nits", default=1000, type=int)
+# parser.add_argument("--lr", default=1e-2, type=float)
+# parser.add_argument("--Nbatch", default=30, type=int)
+# parser.add_argument("--Nbasis", default=30, type=int)
+# parser.add_argument("--Ns", default=5, type=int)
+# parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
+# parser.add_argument("--q_frac", default=0.7, type=float)
+# parser.add_argument("--noise", default=0.1, type=float)
+# parser.add_argument("--f_name", default="vdp", type=str)
+# parser.add_argument("--mode", default="expr", type=str)
+# parser.add_argument("--rep", default=0, type=int)
+# parser.add_argument("--mus", default=[2.0, 1.0, 0.1, 0.0], nargs="+", type=float)
+# parser.add_argument("--data_dir", default="data", type=str)
+# parser.add_argument("--preds_dir", default="preds", type=str)
+# args = parser.parse_args()
 
-Nbatch = args.Nbatch
-Nbasis = args.Nbasis
-noise = args.noise
-Nits = args.Nits
-Nvu = args.Nvu
-Nvgs = args.Nvgs
-zgran = args.zgrange
-zuran = args.zurange
-Ns = args.Ns
-lr = args.lr
-q_frac = args.q_frac
-f_name = args.f_name
-ampgs = args.ampgs
-rep = args.rep
-mus = args.mus
-mode = args.mode
-data_dir = args.data_dir
-preds_dir = args.preds_dir
-print(args)
+# Nbatch = args.Nbatch
+# Nbasis = args.Nbasis
+# noise = args.noise
+# Nits = args.Nits
+# Nvu = args.Nvu
+# Nvgs = args.Nvgs
+# zgran = args.zgrange
+# zuran = args.zurange
+# Ns = args.Ns
+# lr = args.lr
+# q_frac = args.q_frac
+# f_name = args.f_name
+# ampgs = args.ampgs
+# rep = args.rep
+# mus = args.mus
+# mode = args.mode
+# data_dir = args.data_dir
+# preds_dir = args.preds_dir
+# print(args)
 
 
-# Nbatch = 50
-# Nbasis = 50
-# noise = 0.05
-# Nits = 2000
-# Nvu = 50
-# Ns = 10
-# lr = 5e-3
-# q_frac = 0.8
-# f_name = "vdp"
-# Nvgs = [20, 12]
-# zgran = [0.7, 0.4]
-# ampgs = [2.0, 3.0]
-# zuran = 1.8
-# rep = 1
-# mus = [2.0]
-# data_dir = "data"
-# preds_dir = "preds/duffing"
+Nbatch = 50
+Nbasis = 50
+noise = 0.05
+Nits = 2000
+Nvu = 50
+Ns = 10
+lr = 5e-3
+q_frac = 0.8
+f_name = "vdp"
+Nvgs = [20, 12]
+zgran = [0.7, 0.4]
+ampgs = [2.0, 3.0]
+zuran = 1.8
+rep = 5
+mus = [2.0]
+data_dir = "data"
+preds_dir = "preds/duffing"
 
 keys = jrnd.split(jrnd.PRNGKey(rep), 5)
 #%%
-x_train, y_train, x_test, y_test = load_duffing_data(2, data_dir=data_dir)
+x_train, y_train, x_test, y_test = load_duffing_data(rep, data_dir=data_dir)
 #%%
 keys = jrnd.split(keys[0], 5)  #%%
 O = 1
@@ -112,7 +112,7 @@ model.fit(
 )
 #%%
 model.fit(
-    Nits / 10,
+    int(Nits / 10),
     lr,
     Nbatch,
     Ns,
@@ -165,4 +165,6 @@ with open(f_name + "res.pkl", "wb") as f:
 f_name = "rep" + str(rep) + "predictions.csv"
 odir = Path(preds_dir + "/nvkmC" + str(C))
 odir.mkdir(parents=True, exist_ok=True)
-pd.DataFrame({"x_test": x_test, "pred_mean": m, "pred_var": s}).to_csv(odir / f_name)
+pd.DataFrame(
+    {"x_test": x_test, "y_test": y_test, "pred_mean": m[0], "pred_var": s[0]}
+).to_csv(odir / f_name)
