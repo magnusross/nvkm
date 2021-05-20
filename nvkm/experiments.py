@@ -100,11 +100,9 @@ def generate_duffing_data(
         x = (t - jnp.mean(t)) / jnp.std(t)
         y = (y - jnp.mean(y)) / jnp.std(y) + 0.1 * jrnd.normal(keys[3], (N,))
 
-        plt.show()
-
         N_te = 40
         N_te_rand = 300
-        txs = jrnd.randint(keys[1], (1,), minval=0, maxval=N)
+        txs = jrnd.randint(keys[1], (1,), minval=0, maxval=N - N_te)
 
         all_idx = jnp.arange(N)
         t_idx_imp = jnp.arange(txs, N_te + txs)
@@ -123,7 +121,67 @@ def generate_duffing_data(
         pd.DataFrame({"x_test": x_test, "y_test": y_test}).to_csv(
             path + "/rep" + str(i) + "test.csv"
         )
-        print(keys)
+        keys = jrnd.split(keys[4], 5)
+
+
+def generate_mo_duffing_data(
+    path="/Users/magnus/Documents/phd/code/repos/nvkm/data/mo_duffing",
+):
+    keys = jrnd.split(jrnd.PRNGKey(1), 4)
+    for k in range(5):
+        gp1D = EQApproxGP(
+            z=None, v=None, amp=1.0, ls=2.0, noise=0.0001, N_basis=50, D=1
+        )
+
+        @jit
+        def gp_forcing(t):
+            return gp1D.sample(t, 1, key=keys[0]).flatten()
+
+        def duffing(t, z, a=1, b=-1, c=0.1, d=1.0):
+            x, y = z
+            # y = dx/dt
+            return [y, -a * y - b * x - c * x ** 3 + d * gp_forcing(t)]
+
+        N = 500
+
+        t = jnp.linspace(0, 150, N)
+        ys = []
+        for b, d in [(1, 1.0), (0.6, 1.0), (0.8, 3.0)]:
+
+            sol = osp.integrate.solve_ivp(
+                partial(duffing, b=-b, d=d), [0, 150], [0.0, 0.0], t_eval=t
+            )
+            y = sol.y[0]
+            y = (y - jnp.mean(y)) / jnp.std(y) + 0.1 * jrnd.normal(keys[1], (N,))
+            ys.append(y)
+            keys = jrnd.split(keys[0], 4)
+
+        x = (t - jnp.mean(t)) / jnp.std(t)
+
+        N_te = 50
+
+        all_idx = jnp.arange(N)
+        x_test, y_test, x_train, y_train = [0.0] * 3, [0.0] * 3, [0.0] * 3, [0.0] * 3
+        all_idx = jnp.arange(N)
+        run_idx = jnp.arange(N - N_te)
+        for i in range(3):
+            txs = jrnd.choice(keys[i], run_idx, (1,))
+            t_idx = jnp.arange(txs, N_te + txs)
+            run_idx = run_idx[~jnp.isin(run_idx, jnp.arange(txs - N_te, N_te + txs))]
+
+            x_test[i], y_test[i] = x[t_idx], ys[i][t_idx]
+            train_idx = ~jnp.isin(all_idx, t_idx)
+            x_train[i], y_train[i] = x[train_idx], ys[i][train_idx]
+
+        train_dict = {f"x{o}_train": x_train[o] for o in range(3)}
+        train_dict.update({f"y{o}_train": y_train[o] for o in range(3)})
+
+        test_dict = {f"x{o}_test": x_test[o] for o in range(3)}
+        test_dict.update({f"y{o}_test": y_test[o] for o in range(3)})
+
+        pd.DataFrame(train_dict).to_csv(path + "/rep" + str(k) + "train.csv")
+        pd.DataFrame(test_dict).to_csv(path + "/rep" + str(k) + "test.csv")
+        print(k, "done!")
         keys = jrnd.split(keys[4], 5)
 
 
@@ -148,6 +206,22 @@ def load_duffing_data(rep, data_dir="data"):
         jnp.array(tr_df["y_train"]),
         jnp.array(te_df["x_test"]),
         jnp.array(te_df["y_test"]),
+    )
+
+
+def load_mo_duffing_data(rep, data_dir="data"):
+    path = data_dir + "/mo_duffing/rep" + str(rep)
+    tr_df = pd.read_csv(path + "train.csv")
+    te_df = pd.read_csv(path + "test.csv")
+    x_train = [jnp.array(tr_df[f"x{i}_train"]) for i in range(3)]
+    y_train = [jnp.array(tr_df[f"y{i}_train"]) for i in range(3)]
+    x_test = [jnp.array(te_df[f"x{i}_test"]) for i in range(3)]
+    y_test = [jnp.array(te_df[f"y{i}_test"]) for i in range(3)]
+    return (
+        x_train,
+        y_train,
+        x_test,
+        y_test,
     )
 
 
