@@ -103,7 +103,7 @@ lsu = zu[0][0] - zu[1][0]
 tgs, lsgs = make_zg_grids(zgran, Nvgs)
 # %%
 
-modelc2 = IOMOVarNVKM(
+model = IOMOVarNVKM(
     [tgs],
     zu,
     udata,
@@ -122,10 +122,10 @@ modelc2 = IOMOVarNVKM(
 )
 #%%
 # 5e-4
-modelc2.fit(
+model.fit(
     Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise", "u_noise"], key=keys[1],
 )
-modelc2.fit(
+model.fit(
     int(Nits / 10),
     lr,
     Nbatch,
@@ -133,20 +133,21 @@ modelc2.fit(
     dont_fit=["q_pars", "ampgs", "lsgs", "ampu", "lsu"],
     key=keys[2],
 )
-print(modelc2.noise)
-print(modelc2.ampu)
-print(modelc2.lsu)
-print(modelc2.ampgs)
-print(modelc2.lsgs)
+model.save(f_name + "_model.pkl")
+print(model.noise)
+print(model.ampu)
+print(model.lsu)
+print(model.ampgs)
+print(model.lsgs)
 # %%
 tp_train = jnp.linspace(-zuran, zuran, 400)
 tp_test = tp_train + t_offset
-axs = modelc2.plot_samples(tp_train, [tp_train], 10, return_axs=True, key=keys[2])
+axs = model.plot_samples(tp_train, [tp_train], 10, return_axs=True, key=keys[2])
 axs[0].set_xlim([-zuran, zuran])
 axs[1].set_xlim([-zuran, zuran])
 plt.savefig(f_name + "samps_train.pdf")
 #%%
-axs = modelc2.plot_samples(tp_test, [tp_test], 10, return_axs=True, key=keys[3])
+axs = model.plot_samples(tp_test, [tp_test], 10, return_axs=True, key=keys[3])
 axs[0].set_xlim([t_offset - zuran, t_offset + zuran])
 axs[1].set_xlim([t_offset - zuran, t_offset + zuran])
 axs[1].plot(ytest[0][0], ytest[1][0], c="black", ls=":")
@@ -154,25 +155,25 @@ plt.savefig(f_name + "samps_test.pdf")
 # axs[1].xrange(18, 22)
 #%%
 
-p_samps = modelc2.sample(ytest[0], 50, key=keys[4])
-u_samps_tr, p_samps_tr = modelc2.joint_sample(utrain[0], ytrain[0], 50, key=keys[5])
+p_samps = model.sample(ytest[0], 50, key=keys[4])
+u_samps_tr, p_samps_tr = model.joint_sample(utrain[0], ytrain[0], 50, key=keys[5])
 
 
 #%%
 scaled_samps = p_samps[0] * y_std + y_mean
 pred_mean = jnp.mean(scaled_samps, axis=1)
 pred_std = jnp.std(scaled_samps, axis=1)
-pred_var = pred_std ** 2 + y_std ** 2 * modelc2.noise[0] ** 2
+pred_var = pred_std ** 2 + y_std ** 2 * model.noise[0] ** 2
 
 scaled_samps_tr = p_samps_tr[0] * y_std + y_mean
 pred_mean_tr = jnp.mean(scaled_samps_tr, axis=1)
 pred_std_tr = jnp.std(scaled_samps_tr, axis=1)
-pred_var_tr = pred_std_tr ** 2 + y_std ** 2 * modelc2.noise[0] ** 2
+pred_var_tr = pred_std_tr ** 2 + y_std ** 2 * model.noise[0] ** 2
 
 u_scaled_samps_tr = u_samps_tr * u_std + u_mean
 u_pred_mean_tr = jnp.mean(u_scaled_samps_tr, axis=1)
 u_pred_std_tr = jnp.std(u_scaled_samps_tr, axis=1)
-u_pred_var_tr = u_pred_std_tr ** 2 + u_std ** 2 * modelc2.u_noise ** 2
+u_pred_var_tr = u_pred_std_tr ** 2 + u_std ** 2 * model.u_noise ** 2
 
 
 rmse = RMSE(pred_mean, jnp.array(data["yVal"]))
@@ -225,5 +226,5 @@ plt.savefig(f_name + "main.pdf")
 plt.show()
 #%%
 tf = jnp.linspace(-max(zgran), max(zgran), 100)
-modelc2.plot_filters(tf, 15, save=f_name + "filts.pdf", key=keys[6])
+model.plot_filters(tf, 15, save=f_name + "filts.pdf", key=keys[6])
 # %%
