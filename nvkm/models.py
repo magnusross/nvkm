@@ -599,7 +599,6 @@ class MOVarNVKM:
 
             if i % 10 == 0:
                 print(f"it: {i} F: {value} ")
-                print("noisevar: %.2f" % bound_arg[-1][0])
                 # print("qp:" + str(jnp.max(q_pars["mu_u"])))
             opt_state = opt_update(i, grads, opt_state)
 

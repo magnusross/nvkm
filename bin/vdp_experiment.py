@@ -15,65 +15,65 @@ import GPy
 import argparse
 from pathlib import Path
 
-parser = argparse.ArgumentParser(description="EEG MO experiment.")
-parser.add_argument("--Nvu", default=70, type=int)
-parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
-parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
-parser.add_argument("--zurange", default=2.0, type=float)
-parser.add_argument("--Nits", default=1000, type=int)
-parser.add_argument("--lr", default=1e-2, type=float)
-parser.add_argument("--Nbatch", default=30, type=int)
-parser.add_argument("--Nbasis", default=30, type=int)
-parser.add_argument("--Ns", default=5, type=int)
-parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
-parser.add_argument("--q_frac", default=0.7, type=float)
-parser.add_argument("--noise", default=0.1, type=float)
-parser.add_argument("--f_name", default="vdp", type=str)
-parser.add_argument("--mode", default="expr", type=str)
-parser.add_argument("--rep", default=0, type=int)
-parser.add_argument("--mus", default=[2.0, 1.0, 0.1, 0.0], nargs="+", type=float)
-parser.add_argument("--data_dir", default="data", type=str)
-parser.add_argument("--preds_dir", default="preds", type=str)
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="EEG MO experiment.")
+# parser.add_argument("--Nvu", default=70, type=int)
+# parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
+# parser.add_argument("--zgrange", default=[0.3], nargs="+", type=float)
+# parser.add_argument("--zurange", default=2.0, type=float)
+# parser.add_argument("--Nits", default=1000, type=int)
+# parser.add_argument("--lr", default=1e-2, type=float)
+# parser.add_argument("--Nbatch", default=30, type=int)
+# parser.add_argument("--Nbasis", default=30, type=int)
+# parser.add_argument("--Ns", default=5, type=int)
+# parser.add_argument("--ampgs", default=[2.0], nargs="+", type=float)
+# parser.add_argument("--q_frac", default=0.7, type=float)
+# parser.add_argument("--noise", default=0.1, type=float)
+# parser.add_argument("--f_name", default="vdp", type=str)
+# parser.add_argument("--mode", default="expr", type=str)
+# parser.add_argument("--rep", default=0, type=int)
+# parser.add_argument("--mus", default=[2.0, 1.0, 0.1, 0.0], nargs="+", type=float)
+# parser.add_argument("--data_dir", default="data", type=str)
+# parser.add_argument("--preds_dir", default="preds", type=str)
+# args = parser.parse_args()
 
-Nbatch = args.Nbatch
-Nbasis = args.Nbasis
-noise = args.noise
-Nits = args.Nits
-Nvu = args.Nvu
-Nvgs = args.Nvgs
-zgran = args.zgrange
-zuran = args.zurange
-Ns = args.Ns
-lr = args.lr
-q_frac = args.q_frac
-f_name = args.f_name
-ampgs = args.ampgs
-rep = args.rep
-mus = args.mus
-mode = args.mode
-data_dir = args.data_dir
-preds_dir = args.preds_dir
-print(args)
+# Nbatch = args.Nbatch
+# Nbasis = args.Nbasis
+# noise = args.noise
+# Nits = args.Nits
+# Nvu = args.Nvu
+# Nvgs = args.Nvgs
+# zgran = args.zgrange
+# zuran = args.zurange
+# Ns = args.Ns
+# lr = args.lr
+# q_frac = args.q_frac
+# f_name = args.f_name
+# ampgs = args.ampgs
+# rep = args.rep
+# mus = args.mus
+# mode = args.mode
+# data_dir = args.data_dir
+# preds_dir = args.preds_dir
+# print(args)
 
-# Nbatch = 50
-# Nbasis = 30
-# noise = 0.1
-# Nits = 10
-# Nvu = 70
-# Ns = 5
-# lr = 1e-2
-# q_frac = 0.8
-# f_name = "vdp"
-# mode = "expr"
-# Nvgs = [15]
-# zgran = [0.3]
-# ampgs = [2.0]
-# zuran = 2.0
-# rep = 1
-# mus = [2.0]
-# data_dir = "data"
-# preds_dir = "preds"
+Nbatch = 50
+Nbasis = 30
+noise = 0.1
+Nits = 5000
+Nvu = 70
+Ns = 5
+lr = 3e-3
+q_frac = 0.8
+f_name = "vdp"
+mode = "expr"
+Nvgs = [15]
+zgran = [0.3]
+ampgs = [2.0]
+zuran = 2.0
+rep = 1
+mus = [2.0]
+data_dir = "data"
+preds_dir = "preds"
 
 keys = jrnd.split(jrnd.PRNGKey(rep), 5)
 
@@ -127,8 +127,26 @@ for mu in mus:
         N_basis=Nbasis,
     )
     model.fit(
-        Nits, lr, Nbatch, Ns, dont_fit=["lsgs", "ampu", "lsu", "noise"], key=keys[3],
+        Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise"], key=keys[2],
     )
+
+    axs = model.plot_samples(
+        jnp.linspace(-zuran, zuran, 300),
+        [jnp.linspace(-zuran, zuran, 300)] * O,
+        Ns,
+        return_axs=True,
+        key=keys[2],
+    )
+    plt.show()
+    model.fit(
+        Nits,
+        lr,
+        Nbatch,
+        Ns,
+        dont_fit=["q_pars", "ampgs", "lsgs", "ampu", "lsu"],
+        key=keys[3],
+    )
+
     model.save("plots/" + f_name + str(mu) + ".pkl")
     print(model.noise)
     print(model.ampu)
@@ -145,7 +163,8 @@ for mu in mus:
     )
     axs[1].scatter(x_test, y_test, c="red", s=2.0)
     plt.savefig("plots/" + f_name + str(mu) + ".pdf")
-
+    plt.show()
+    quit()
     preds = model.sample([x_test], 50, key=keys[4])[0]
     pred_mean = jnp.mean(preds, axis=1)
     pred_var = jnp.var(preds, axis=1) + model.noise[0] ** 2
