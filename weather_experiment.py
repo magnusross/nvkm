@@ -18,20 +18,20 @@ import pickle
 
 parser = argparse.ArgumentParser(description="Weather MO experiment.")
 parser.add_argument("--Nvu", default=60, type=int)
-parser.add_argument("--Nvgs", default=[15], nargs="+", type=int)
-parser.add_argument("--zgrange", default=[0.25], nargs="+", type=float)
-parser.add_argument("--zurange", default=1.8, type=float)
-parser.add_argument("--Nits", default=1000, type=int)
+parser.add_argument("--Nvgs", default=[15, 10, 6], nargs="+", type=int)
+parser.add_argument("--zgrange", default=[0.463, 0.372, 0.239], nargs="+", type=float)
+parser.add_argument("--zurange", default=2.0, type=float)
+parser.add_argument("--Nits", default=10000, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
-parser.add_argument("--Nbatch", default=30, type=int)
+parser.add_argument("--Nbatch", default=80, type=int)
 parser.add_argument("--Nbasis", default=30, type=int)
-parser.add_argument("--Ns", default=20, type=int)
-parser.add_argument("--ampgs", default=[5], nargs="+", type=float)
-parser.add_argument("--q_frac", default=0.5, type=float)
-parser.add_argument("--noise", default=0.1, type=float)
-parser.add_argument("--f_name", default="eeg", type=str)
+parser.add_argument("--Ns", default=10, type=int)
+parser.add_argument("--ampgs", default=[5.0, 5.0, 5.0], nargs="+", type=float)
+parser.add_argument("--q_frac", default=0.8, type=float)
+parser.add_argument("--noise", default=0.05, type=float)
+parser.add_argument("--f_name", default="weather", type=str)
 parser.add_argument("--data_dir", default="data", type=str)
-parser.add_argument("--key", default=1, type=int)
+parser.add_argument("--key", default=102, type=int)
 args = parser.parse_args()
 
 Nbatch = args.Nbatch
@@ -104,6 +104,7 @@ model.fit(
     dont_fit=["q_pars", "ampgs", "lsgs", "ampu", "lsu"],
     key=keys[5],
 )
+model.save(f_name + "_model.pkl")
 print(model.noise)
 print(model.ampu)
 print(model.lsu)
@@ -121,14 +122,14 @@ axs = model.plot_samples(
 )
 axs[2].scatter(data.stest_x[1], data.stest_y[1], c="red", alpha=0.3)
 axs[3].scatter(data.stest_x[2], data.stest_y[2], c="red", alpha=0.3)
-plt.savefig(f_name + "samples.pdf")
+plt.savefig(f_name + "_samples.pdf")
 plt.show()
 
 #%%
 model.plot_filters(
     jnp.linspace(-max(zgran), max(zgran), 60),
     10,
-    save=f_name + "filters.pdf",
+    save=f_name + "_filters.pdf",
     key=keys[3],
 )
 
@@ -168,7 +169,7 @@ for i in range(2):
         label="$\pm 2 \sigma$",
     )
 
-plt.savefig(f_name + "main.pdf")
+plt.savefig(f_name + "_main.pdf")
 # %%
 print(f"Cambermet NMSE: {NMSE(pred_mean[1], data.test_y[1]):.2f}")
 print(f"Chimet NMSE: {NMSE(pred_mean[2], data.test_y[2]):.2f}")
