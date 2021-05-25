@@ -17,7 +17,7 @@ import copy
 import pickle
 
 parser = argparse.ArgumentParser(description="Weather MO experiment.")
-parser.add_argument("--Nvu", default=60, type=int)
+parser.add_argument("--Nvu", default=100, type=int)
 parser.add_argument("--Nvgs", default=[15, 10, 6], nargs="+", type=int)
 parser.add_argument("--zgrange", default=[0.463, 0.372, 0.239], nargs="+", type=float)
 parser.add_argument("--zurange", default=2.0, type=float)
