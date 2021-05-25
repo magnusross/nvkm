@@ -1,16 +1,16 @@
-from functools import partial
-from typing import Callable, Union, Collection
 import operator
+import pickle
+from functools import partial
+from typing import Callable, Collection, Union
 
 from jax.config import config
-import jax.numpy as jnp
-import jax.scipy as jsp
-import jax.random as jrnd
-from jax import jit, vmap
 import jax
+import jax.numpy as jnp
+import jax.random as jrnd
+import jax.scipy as jsp
 import matplotlib.pyplot as plt
-
 import numpy as onp
+from jax import jit, vmap
 
 
 from .settings import JITTER

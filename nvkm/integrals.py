@@ -2,7 +2,7 @@ from jax import jit, vmap
 import jax.numpy as jnp
 from jax import lax
 from jax import config
-from .utils import map_reduce, map_reduce_1vec, vmap_scan
+from nvkm.utils import map_reduce, map_reduce_1vec, vmap_scan
 import operator
 
 config.update("jax_enable_x64", True)

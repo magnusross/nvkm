@@ -3,7 +3,7 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import jax.random as jrnd
-from jax import jit
+from jax import jit, vmap
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy as osp
@@ -185,6 +185,72 @@ def generate_mo_duffing_data(
         keys = jrnd.split(keys[4], 5)
 
 
+def generate_volterra_data(
+    path="/Users/magnus/Documents/phd/code/repos/nvkm/data/volt",
+):
+    for rep in range(0, 5):
+        keys = jrnd.split(jrnd.PRNGKey(rep), 2)
+        #%%
+
+        gp1D = EQApproxGP(
+            z=None, v=None, amp=1.0, ls=0.5, noise=0.0001, N_basis=50, D=1
+        )
+
+        @jit
+        def gp_forcing(t):
+            return gp1D.sample(t, 1, key=keys[0]).flatten()
+
+        @jit
+        def G1(x, a=1.0, b=1.0, alpha=2):
+            return jnp.exp(-alpha * x ** 2) * (-jnp.sin(6 * x))
+
+        @jit
+        def G2(x, a=1.0, b=1.0, alpha=2):
+            return jnp.exp(-alpha * x ** 2) * (jnp.sin(5 * x) ** 2)
+
+        @jit
+        def G3(x, a=1.0, b=1.0, alpha=2):
+            return jnp.exp(-alpha * x ** 2) * (jnp.cos(-4 * x))
+
+        @partial(jit, static_argnums=(1, 2, 3))
+        def trapz_int(t, h, x, N, dim=1, decay=4):
+            tau = jnp.linspace(t - decay, t + decay, N)
+            ht = h(t - tau)
+            xt = x(tau)
+            return jnp.trapz(ht * xt, x=tau, axis=0)
+
+        N = 1000
+        t = jnp.linspace(-20, 20, N)
+        Nint = 100
+
+        fyc1 = jit(lambda x: trapz_int(x, G1, gp_forcing, Nint, decay=3.0))
+        fyc2 = jit(lambda x: trapz_int(x, G2, gp_forcing, Nint, decay=3.0))
+        fyc3 = jit(lambda x: trapz_int(x, G3, gp_forcing, Nint, decay=3.0))
+        #%%
+        yc1 = vmap(fyc1)(t)
+        yc2 = vmap(fyc2)(t)
+        yc3 = vmap(fyc3)(t)
+        # yc3 = vmap(fyc3)(t) ** 3
+        y = 5 * yc1 * yc2 + 5 * yc3 ** 3
+        y = jnp.minimum(y, 1 * jnp.ones_like(y))
+
+        # %%
+        # plt.plot(tg, G3(tg) * G3(tg) * G3(tg))
+        #%%
+        Ntr = 250
+        tridx = jrnd.choice(keys[1], jnp.arange(N), (Ntr,))
+        x_train, y_train = t[tridx], y[tridx]
+        teidx = ~jnp.isin(jnp.arange(N), tridx)
+        x_test, y_test = t[teidx], y[teidx]
+        pd.DataFrame({"x_train": x_train, "y_train": y_train}).to_csv(
+            path + "/rep" + str(rep) + "train.csv"
+        )
+        pd.DataFrame({"x_test": x_test, "y_test": y_test}).to_csv(
+            path + "/rep" + str(rep) + "test.csv"
+        )
+        print(rep, "done")
+
+
 def load_vdp_data(mu, rep, data_dir="data"):
     path = data_dir + "/vdp" + "/mu" + str(mu).replace(".", "") + "/rep" + str(rep)
     tr_df = pd.read_csv(path + "train.csv")
@@ -198,7 +264,7 @@ def load_vdp_data(mu, rep, data_dir="data"):
 
 
 def load_duffing_data(rep, data_dir="data"):
-    path = data_dir + "/duffing/rep" + str(rep)
+    path = data_dir + "/rep" + str(rep)
     tr_df = pd.read_csv(path + "train.csv")
     te_df = pd.read_csv(path + "test.csv")
     return (
@@ -334,7 +400,6 @@ class WeatherDataSet(MODataSet):
         self.output_names = ["Bramblemet", "Cambermet", "Chimet", "Sotonmet"]
 
 
-# %%
 class ExchangeDataSet(MODataSet):
     def __init__(self, data_dir):
         super().__init__(data_dir)

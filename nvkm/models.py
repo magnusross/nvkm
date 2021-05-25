@@ -52,7 +52,7 @@ class EQApproxGP:
         self.Kvv = None
         self.LKvv = None
 
-        if self.z == None:
+        if self.z is None:
             pass
 
         else:
@@ -1017,3 +1017,41 @@ class IOMOVarNVKM(MOVarNVKM):
 #     args
 
 #     return model_class(q_class=q_class, **sd)
+def load_io_model(pkl_path):
+    with open(pkl_path, "rb") as f:
+        model_dict = pickle.load(f)
+
+    return IOMOVarNVKM(
+        model_dict["zgs"],
+        model_dict["zu"],
+        model_dict["data"][0],
+        model_dict["data"][1],
+        u_noise=model_dict["u_noise"],
+        q_pars_init=model_dict["q_pars"],
+        N_basis=model_dict["N_basis"],
+        ampgs=model_dict["ampgs"],
+        noise=model_dict["noise"],
+        alpha=model_dict["alpha"],
+        lsgs=model_dict["lsgs"],
+        lsu=model_dict["lsu"],
+        ampu=model_dict["ampu"],
+    )
+
+
+def load_mo_model(pkl_path):
+    with open(pkl_path, "rb") as f:
+        model_dict = pickle.load(f)
+
+    return MOVarNVKM(
+        model_dict["zgs"],
+        model_dict["zu"],
+        model_dict["data"],
+        q_pars_init=model_dict["q_pars"],
+        N_basis=model_dict["N_basis"],
+        ampgs=model_dict["ampgs"],
+        noise=model_dict["noise"],
+        alpha=model_dict["alpha"],
+        lsgs=model_dict["lsgs"],
+        lsu=model_dict["lsu"],
+        ampu=model_dict["ampu"],
+    )
