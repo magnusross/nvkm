@@ -188,17 +188,17 @@ def generate_mo_duffing_data(
 def generate_volterra_data(
     path="/Users/magnus/Documents/phd/code/repos/nvkm/data/volt",
 ):
-    for rep in range(0, 5):
-        keys = jrnd.split(jrnd.PRNGKey(rep), 2)
-        #%%
+    key1, key2 = jrnd.split(jrnd.PRNGKey(0), 2)
+    for rep in range(0, 10):
 
+        #%%
         gp1D = EQApproxGP(
             z=None, v=None, amp=1.0, ls=0.5, noise=0.0001, N_basis=50, D=1
         )
 
         @jit
         def gp_forcing(t):
-            return gp1D.sample(t, 1, key=keys[0]).flatten()
+            return gp1D.sample(t, 1, key=key1).flatten()
 
         @jit
         def G1(x, a=1.0, b=1.0, alpha=2):
@@ -238,7 +238,7 @@ def generate_volterra_data(
         # plt.plot(tg, G3(tg) * G3(tg) * G3(tg))
         #%%
         Ntr = 250
-        tridx = jrnd.choice(keys[1], jnp.arange(N), (Ntr,))
+        tridx = jrnd.choice(key2, jnp.arange(N), (Ntr,))
         x_train, y_train = t[tridx], y[tridx]
         teidx = ~jnp.isin(jnp.arange(N), tridx)
         x_test, y_test = t[teidx], y[teidx]
@@ -249,6 +249,7 @@ def generate_volterra_data(
             path + "/rep" + str(rep) + "test.csv"
         )
         print(rep, "done")
+        key2 = jrnd.split(key2)
 
 
 def load_vdp_data(mu, rep, data_dir="data"):

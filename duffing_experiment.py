@@ -108,7 +108,7 @@ model = MOVarNVKM(
 
 #%%
 model.fit(
-    Nits, lr, Nbatch, Ns, dont_fit=["ampu", "lsu", "noise"], key=keys[1],
+    Nits, lr, Nbatch, Ns, dont_fit=["lsu", "noise"], key=keys[1],
 )
 #%%
 model.fit(
@@ -120,6 +120,7 @@ model.fit(
     key=keys[2],
 )
 #%%
+model.save(f_name + "_model.pkl")
 axs = model.plot_samples(
     jnp.linspace(-zuran, zuran, 300),
     [jnp.linspace(-zuran, zuran, 300)] * O,
