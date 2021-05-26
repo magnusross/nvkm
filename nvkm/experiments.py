@@ -107,7 +107,12 @@ def generate_duffing_data(
         all_idx = jnp.arange(N)
         t_idx_imp = jnp.arange(txs, N_te + txs)
         t_idx_rand = jnp.sort(
-            jrnd.choice(keys[2], all_idx[~jnp.isin(all_idx, t_idx_imp)], (N_te_rand,))
+            jrnd.choice(
+                keys[2],
+                all_idx[~jnp.isin(all_idx, t_idx_imp)],
+                (N_te_rand,),
+                replace=False,
+            )
         )
         t_idx = jnp.hstack((t_idx_imp, t_idx_rand))
 
@@ -165,7 +170,7 @@ def generate_mo_duffing_data(
         all_idx = jnp.arange(N)
         run_idx = jnp.arange(N - N_te)
         for i in range(3):
-            txs = jrnd.choice(keys[i], run_idx, (1,))
+            txs = jrnd.choice(keys[i], run_idx, (1,), replace=False)
             t_idx = jnp.arange(txs, N_te + txs)
             run_idx = run_idx[~jnp.isin(run_idx, jnp.arange(txs - N_te, N_te + txs))]
 
@@ -219,7 +224,7 @@ def generate_volterra_data(
             xt = x(tau)
             return jnp.trapz(ht * xt, x=tau, axis=0)
 
-        N = 1000
+        N = 1200
         t = jnp.linspace(-20, 20, N)
         Nint = 100
 
@@ -231,16 +236,22 @@ def generate_volterra_data(
         yc2 = vmap(fyc2)(t)
         yc3 = vmap(fyc3)(t)
         # yc3 = vmap(fyc3)(t) ** 3
-        y = 5 * yc1 * yc2 + 5 * yc3 ** 3
-        y = jnp.minimum(y, 1 * jnp.ones_like(y))
 
+        y = 5 * yc1 * yc2 + 5 * yc3 ** 3
+        y = jnp.minimum(y, 1 * jnp.ones_like(y)) + 0.05 * jrnd.normal(key2, (N,))
+        _, key2 = jrnd.split(key2)
         # %%
         # plt.plot(tg, G3(tg) * G3(tg) * G3(tg))
         #%%
-        Ntr = 250
-        tridx = jrnd.choice(key2, jnp.arange(N), (Ntr,))
+        Ntr = 400
+        all_idx = jnp.arange(N)
+        tridx = jrnd.choice(key2, all_idx, (Ntr,), replace=False)
+
+        teidx = jnp.setdiff1d(all_idx, tridx)
         x_train, y_train = t[tridx], y[tridx]
-        teidx = ~jnp.isin(jnp.arange(N), tridx)
+
+        print(len(teidx))
+        print(len(tridx))
         x_test, y_test = t[teidx], y[teidx]
         pd.DataFrame({"x_train": x_train, "y_train": y_train}).to_csv(
             path + "/rep" + str(rep) + "train.csv"
@@ -249,7 +260,7 @@ def generate_volterra_data(
             path + "/rep" + str(rep) + "test.csv"
         )
         print(rep, "done")
-        key2 = jrnd.split(key2)
+        _, key2 = jrnd.split(key2)
 
 
 def load_vdp_data(mu, rep, data_dir="data"):
