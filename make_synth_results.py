@@ -1,7 +1,6 @@
 #%%
 from nvkm.models import MOVarNVKM, EQApproxGP
 from nvkm.utils import l2p, RMSE, NMSE, make_zg_grids, gaussian_NLPD
-from nvkm.experiments import load_vdp_data
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
 import jax.random as jrnd
@@ -22,18 +21,11 @@ plt.rc("legend", fontsize=10)  # using a size in points
 plt.rc("legend", fontsize="small")
 #%%
 def main():
-    alt_m_dir = "preds/paper/volt/"
-    data_dir = "data/volt/"
+    alt_m_dir = os.path.join("preds", "paper", "synth")
+    data_dir = os.path.join("data", "volt")
     model_names = [n for n in os.listdir(alt_m_dir) if not n.startswith(".")]
     model_names.sort()
-    # nlpd_df = pd.DataFrame(
-    #     columns=(onp.repeat(onp.array(mus), 2), onp.array(["m", "s"] * len(mus))),
-    #     dtype=object,
-    # )
-    # nmse_df = pd.DataFrame(
-    #     columns=(onp.repeat(onp.array(mus), 2), onp.array(["m", "s"] * len(mus))),
-    #     dtype=object,
-    # )
+
     df = pd.DataFrame(
         index=model_names, columns=["NMSE", "NMSE_std", "NLPD", "NLPD_std"]
     )
@@ -53,30 +45,28 @@ def main():
         rep_nmses = []
         rep_nlpds = []
         for i in range(reps):
-            path_pred = alt_m_dir + model_name + "/rep" + str(i) + "predictions.csv"
+            path_pred = os.path.join(
+                alt_m_dir, model_name, "rep" + str(i) + "predictions.csv"
+            )
 
             try:
                 pred_df = pd.read_csv(path_pred, dtype=float)
-                # print(pred_df)
+
             except FileNotFoundError:
                 print("No file for: " + path_pred)
                 continue
-            print(model_name)
             x = jnp.array(pred_df["x_test"])
             y = jnp.array(pred_df["pred_mean"])
             var = jnp.array(pred_df["pred_var"])
             y_test = jnp.array(pred_df["y_test"])
             nmse = NMSE(y, y_test)
             nlpd = gaussian_NLPD(y, var, y_test)
-            print(nmse)
             rep_nmses.append(nmse)
             rep_nlpds.append(nlpd)
 
             if i == plot_i:
                 axs1.plot(x, y, label=names[model_name], c=colors[j], lw=lw, alpha=0.75)
                 axs2.plot(x, y, c=colors[j], lw=lw)
-                # axs2.plot(x, y - 2 * jnp.sqrt(var), c=colors[j], ls=":", lw=lw)
-                # axs2.plot(x, y + 2 * jnp.sqrt(var), c=colors[j], ls=":", lw=lw)
                 axs2.fill_between(
                     x,
                     y - 2 * jnp.sqrt(var),
@@ -85,19 +75,6 @@ def main():
                     color=colors[j],
                 )
 
-            # axs[j, i].plot(x, jnp.real(y))
-            # axs[j, i].fill_between(
-            #     x, y - 2 * jnp.sqrt(var), y + 2 * jnp.sqrt(var), alpha=0.3,
-            # )
-            # axs[j, i].plot(true_df["x_test"], true_df["y_test"])
-
-            # axs[j, i].set_title(model_name + "mu" + smu + "r" + str(i))
-
-            # nlpd_df.loc[model_name, (smu, "m")] = jnp.mean(jnp.array(rep_nlpds))
-            # nlpd_df.loc[model_name, (smu, "s")] = jnp.std(jnp.array(rep_nlpds))
-
-            # nmse_df.loc[model_name, (smu, "m")] = jnp.mean(jnp.array(rep_nmses))
-            # nmse_df.loc[model_name, (smu, "s")] = jnp.std(jnp.array(rep_nmses))
         print(model_name + " done!")
 
         df.loc[model_name]["NMSE"] = jnp.mean(jnp.array(rep_nmses))
@@ -105,11 +82,11 @@ def main():
         df.loc[model_name]["NMSE_std"] = jnp.std(jnp.array(rep_nmses))
         df.loc[model_name]["NLPD_std"] = jnp.std(jnp.array(rep_nlpds))
 
-    train_path = data_dir + "/rep" + str(plot_i) + "train.csv"
+    train_path = os.path.join(data_dir, "rep") + str(plot_i) + "train.csv"
     train_df = pd.read_csv(train_path)
     x_train, y_train = train_df["x_train"], train_df["y_train"]
 
-    test_path = data_dir + "/rep" + str(plot_i) + "test.csv"
+    test_path = os.path.join(data_dir, "rep") + str(plot_i) + "test.csv"
     test_df = pd.read_csv(test_path)
     x_test, y_test = test_df["x_test"], test_df["y_test"]
 
@@ -124,7 +101,7 @@ def main():
     axs1.legend()
     axs2.set_xlim(-10, -7)
     plt.tight_layout()
-    plt.savefig("plots/paper/toy.pdf")
+    plt.savefig(os.path.join("plots", "paper", "synth.pdf"))
     plt.show()
     with pd.option_context("precision", 3):
         print(df.astype(float))

@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import argparse
 import pickle
+import os
 
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"]
@@ -26,12 +27,14 @@ plt.rcParams["mathtext.fontset"] = "cm"
 
 
 def plot_tanks():
-    data = pd.read_csv("data/water_tanks.csv")
+    data = pd.read_csv(os.path.join("data", "water_tanks.csv"))
     y_mean, y_std = data["yEst"].mean(), data["yEst"].std()
     u_mean, u_std = data["uEst"].mean(), data["uEst"].std()
     t_mean, t_std = data["Ts"].mean(), data["Ts"].std()
 
-    model = load_io_model("pretrained_models/tank_paper_model.pkl")
+    model = load_io_model(
+        os.path.join("pretrained_models", "paper", "tank_paper_model.pkl")
+    )
     # %%
     tf = jnp.linspace(-0.5, 0.5, 100)
 
@@ -87,13 +90,15 @@ def plot_tanks():
     axs.set_xlabel("Time (s)", loc="left", labelpad=0)
     axs.set_ylabel("Output (V)")
     axs.legend()
-    plt.savefig("plots/paper/tanks.pdf")
+    plt.savefig(os.path.join("plots", "paper", "tanks.pdf"))
 
 
 # %%
 def plot_weather():
     data_set = WeatherDataSet("data")
-    model = load_mo_model("pretrained_models/weather_paper_model.pkl")
+    model = load_mo_model(
+        os.path.join("pretrained_models", "paper", "weather_paper_model.pkl")
+    )
     # %%
 
     train_x = [d[1::4] for d in data_set.train_x]
@@ -149,7 +154,7 @@ def plot_weather():
     plt.setp(axs, ylim=axs[0].get_ylim())
     axs[0].legend()
     plt.tight_layout()
-    plt.savefig("plots/paper/weather.pdf")
+    plt.savefig(os.path.join("plots", "paper", "weather.pdf"))
 
 
 # %%
