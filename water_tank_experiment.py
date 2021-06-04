@@ -168,22 +168,59 @@ def main(args):
 # %%
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Water tank IO experiment.")
-    parser.add_argument("--Nvu", default=150, type=int)
-    parser.add_argument("--Nvgs", default=[15, 10, 6], nargs="+", type=int)
     parser.add_argument(
-        "--zgrange", default=[0.375, 0.303, 0.128], nargs="+", type=float
+        "--Nvu",
+        default=150,
+        type=int,
+        help="Number of inducing points for input process.",
     )
-    parser.add_argument("--zurange", default=2.0, type=float)
-    parser.add_argument("--Nits", default=10000, type=int)
-    parser.add_argument("--lr", default=1e-3, type=float)
-    parser.add_argument("--Nbatch", default=80, type=int)
-    parser.add_argument("--Nbasis", default=30, type=int)
-    parser.add_argument("--Ns", default=10, type=int)
-    parser.add_argument("--ampgs", default=[5.0, 5.0, 5.0], nargs="+", type=float)
-    parser.add_argument("--q_frac", default=0.8, type=float)
-    parser.add_argument("--noise", default=0.05, type=float)
-    parser.add_argument("--f_name", default="tanks", type=str)
-    parser.add_argument("--key", default=103, type=int)
-    parser.add_argument("--data_dir", default="data", type=str)
+    parser.add_argument(
+        "--Nvgs",
+        default=[15, 10, 6],
+        nargs="+",
+        type=int,
+        help="List of number inducing points for each VK.",
+    )
+    parser.add_argument(
+        "--zgrange",
+        default=[0.375, 0.303, 0.128],
+        nargs="+",
+        type=float,
+        help="List of widths for each VK.",
+    )
+    parser.add_argument(
+        "--zurange",
+        default=2.0,
+        type=float,
+        help="Range of inducing points for input process.",
+    )
+    parser.add_argument(
+        "--Nits", default=10000, type=int, help="Number of training iterations."
+    )
+    parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate.")
+    parser.add_argument("--Nbatch", default=80, type=int, help="Batch size.")
+    parser.add_argument(
+        "--Nbasis", default=30, type=int, help="Number of basis functions."
+    )
+    parser.add_argument(
+        "--Ns", default=10, type=int, help="Number of samples for bound estimate."
+    )
+    parser.add_argument(
+        "--ampgs",
+        default=[5.0, 5.0, 5.0],
+        nargs="+",
+        type=float,
+        help="Initial VK amplitudes.",
+    )
+    parser.add_argument(
+        "--q_frac",
+        default=0.8,
+        type=float,
+        help="Amount of initial variational covariance.",
+    )
+    parser.add_argument("--noise", default=0.05, type=float, help="Initial noise.")
+    parser.add_argument("--f_name", default="tanks", type=str, help="Name for saving.")
+    parser.add_argument("--key", default=103, type=int, help="Random seed.")
+    parser.add_argument("--data_dir", default="data", type=str, help="Data directory.")
     args = parser.parse_args()
     main(args)

@@ -27,7 +27,6 @@ class BaseGaussain:
         )
 
         st = 0.5 * (jnp.sum(jnp.log(jnp.diag(LC))) - jnp.sum(jnp.log(jnp.diag(LK))))
-        # id_print(jnp.diag(LC).min())
         return mt + st + 0.5 * LC.shape[0]
 
     @partial(jit, static_argnums=(0, 3))
@@ -42,9 +41,6 @@ class MOIndependentGaussians(BaseGaussain):
     def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
 
         q_pars = {}
-        # q_pars["LC_gs"] = [
-        #     [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
-        # ]
         q_pars["LC_gs"] = [
             [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
         ]

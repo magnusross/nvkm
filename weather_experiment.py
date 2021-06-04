@@ -143,17 +143,34 @@ if __name__ == "__main__":
         help="Range of inducing points for input process.",
     )
     parser.add_argument(
-        "--Nits", default=10000, type=int, help="Number of training iterations"
+        "--Nits", default=10000, type=int, help="Number of training iterations."
     )
-    parser.add_argument("--lr", default=1e-3, type=float)
-    parser.add_argument("--Nbatch", default=80, type=int)
-    parser.add_argument("--Nbasis", default=30, type=int)
-    parser.add_argument("--Ns", default=10, type=int)
-    parser.add_argument("--ampgs", default=[5.0, 5.0, 5.0], nargs="+", type=float)
-    parser.add_argument("--q_frac", default=0.8, type=float)
-    parser.add_argument("--noise", default=0.05, type=float)
-    parser.add_argument("--f_name", default="weather", type=str)
-    parser.add_argument("--data_dir", default="data", type=str)
-    parser.add_argument("--key", default=102, type=int)
+    parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate.")
+    parser.add_argument("--Nbatch", default=80, type=int, help="Batch size.")
+    parser.add_argument(
+        "--Nbasis", default=30, type=int, help="Number of basis functions."
+    )
+    parser.add_argument(
+        "--Ns", default=10, type=int, help="Number of samples for bound estimate."
+    )
+    parser.add_argument(
+        "--ampgs",
+        default=[5.0, 5.0, 5.0],
+        nargs="+",
+        type=float,
+        help="Initial VK amplitudes.",
+    )
+    parser.add_argument(
+        "--q_frac",
+        default=0.8,
+        type=float,
+        help="Amount of initial variational covariance.",
+    )
+    parser.add_argument("--noise", default=0.05, type=float, help="Initial noise.")
+    parser.add_argument(
+        "--f_name", default="weather", type=str, help="Name for saving."
+    )
+    parser.add_argument("--data_dir", default="data", type=str, help="Data directory.")
+    parser.add_argument("--key", default=102, type=int, help="Random seed.")
     args = parser.parse_args()
     main(args)

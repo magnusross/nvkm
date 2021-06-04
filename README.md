@@ -7,12 +7,12 @@ Requirements
 You can make a new virtual environment and install the requirements by running,
 
 ```
-virtualenv -p python3 venv
-source venv/bin/activate
+virtualenv -p python3 nvkmenv
+source nvkmenv/bin/activate
 pip install -r requirements.txt
 ```
 
-The code runs significantly faster on the GPU if one is available. To use the GPU, first follow the instructions [here](https://github.com/google/jax#installation) to get the GPU version of Jax, and then install the rest of the requirements. 
+Note that only python version 3.8 has been tested. The code runs significantly faster on the GPU if one is available. To use the GPU, first follow the instructions [here](https://github.com/google/jax#installation) to get the GPU version of Jax, and then install the rest of the requirements. 
 
 Generate paper plots
 --------------------
@@ -42,7 +42,7 @@ python water_tank_experiment.py
 python weather_experiment.py
 ```
 
-which will produce a variety of plots (in plots directory) and metrics, as well as a .pkl file (in the pretrained_models directory) containing the model. *Warning* this takes quite a while to run especially if not on the GPU. 
+which will produce a variety of plots (in `plots` directory) and metrics, as well as a .pkl file (in the `pretrained_models` directory) containing the model. *Warning* this takes quite a while to run especially if not on the GPU. 
 
 Training other models
 ---------------------
