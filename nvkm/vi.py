@@ -15,6 +15,10 @@ config.update("jax_enable_x64", True)
 
 
 class BaseGaussain:
+    """
+    Single Gaussian distibution
+    """
+
     def __init__(self):
         pass
 
@@ -35,11 +39,17 @@ class BaseGaussain:
 
 
 class MOIndependentGaussians(BaseGaussain):
+    """
+    Variational distibution with an independent MV Gaussian for each VK.
+    """
+
     def __init__(self):
         pass
 
     def initialize(self, model, frac, key=jrnd.PRNGKey(110011)):
-
+        """
+        Initialise parameters.
+        """
         q_pars = {}
         q_pars["LC_gs"] = [
             [arr * frac for arr in model.p_pars["LK_gs"][i]] for i in range(model.O)
@@ -58,6 +68,9 @@ class MOIndependentGaussians(BaseGaussain):
 
     @partial(jit, static_argnums=(0,))
     def KL(self, p_pars, q_pars):
+        """
+        Compute KL divergence 
+        """
         val = 0.0
 
         for i in range(len(q_pars["LC_gs"])):  # each ouput
@@ -71,7 +84,9 @@ class MOIndependentGaussians(BaseGaussain):
 
     @partial(jit, static_argnums=(0, 2))
     def sample(self, q_pars, N_s, key):
-
+        """
+        Sample from distributions.
+        """
         skey, key = jrnd.split(key)
         samps_dict = {"u": None, "gs": []}
         for i in range(len(q_pars["LC_gs"])):

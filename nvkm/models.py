@@ -14,7 +14,7 @@ from jax.config import config
 
 from .integrals import map_fast_I, fast_I
 from .settings import JITTER
-from .utils import choleskyize, eq_kernel, l2p, map2matrix, vmap_scan
+from .utils import choleskyize, eq_kernel, l2p, map2matrix
 from .vi import (
     MOIndependentGaussians,
     gaussian_likelihood,

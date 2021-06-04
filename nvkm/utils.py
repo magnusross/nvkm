@@ -42,15 +42,10 @@ def map2matrix(f: Callable, ts: jnp.ndarray, tps: jnp.ndarray, *args) -> jnp.nda
 def map_reduce(
     f: Callable, *arrs: jnp.ndarray, init_val: float = 0.0, op: Callable = operator.add,
 ):
+    """
+    helper function for performing a map then a sum.
+    """
     return jnp.sum(vmap(f)(*arrs))
-
-
-@partial(jit, static_argnums=(0,))
-def vmap_scan(f, *arrs):
-    def body_func(carry, x):
-        return carry, f(*x)
-
-    return jax.lax.scan(body_func, 0.0, arrs)[1]
 
 
 @jit
@@ -71,16 +66,25 @@ def p2l(p: float):
 
 @jit
 def RMSE(yp, ye):
+    """
+    Root mean square error 
+    """
     return jnp.sqrt((jnp.sum((yp - ye) ** 2)) / len(yp))
 
 
 @jit
 def NMSE(yp, ytrue):
+    """
+    Normalised mean square error 
+    """
     return jnp.mean((yp - ytrue) ** 2) / jnp.mean((jnp.mean(ytrue) - ytrue) ** 2)
 
 
 @jit
 def gaussian_NLPD(yp, ypvar, ytrue):
+    """
+    Gaussian negative log probability density.
+    """
     return jnp.mean(0.5 * jnp.log(2 * jnp.pi * ypvar) + (ytrue - yp) ** 2 / (2 * ypvar))
 
 
@@ -104,26 +108,19 @@ def eq_kernel(
     return amp ** 2 * jnp.exp(-0.5 * jnp.sum((t - tp) ** 2) / ls ** 2)
 
 
-def method(cls):
-    """Decorator to add the function as a method to a class.
-    Args:
-        cls (type): Class to add the function as a method to.
-    """
-
-    def decorator(f):
-        setattr(cls, f.__name__, f)
-        return f
-
-    return decorator
-
-
 @jit
 def choleskyize(A):
+    """
+    Enforces array as vaild cholesky decompostion, for optimisizing covariance 
+    matrices. 
+    """
     return jnp.tril(A - 2 * jnp.diag(jnp.diag(A) * (jnp.diag(A) < 0.0)))
 
 
 def exact_gp_posterior(kf, ts, zs, us, *kf_args, noise=0.0, jitter=JITTER):
-
+    """
+    Gives mean and covarince of exact GP.
+    """
     Koo = map2matrix(kf, zs, zs, *kf_args) + (noise + JITTER) * jnp.eye(len(zs))
     Kop = map2matrix(kf, zs, ts, *kf_args)
     Kpp = map2matrix(kf, ts, ts, *kf_args)
@@ -141,6 +138,9 @@ def exact_gp_posterior(kf, ts, zs, us, *kf_args, noise=0.0, jitter=JITTER):
 
 
 def make_zg_grids(zgran: list, Nvgs: list):
+    """
+    Lays out points on grid for each order VK.
+    """
     tgs = []
     lsgs = []
     for i in range(len(Nvgs)):

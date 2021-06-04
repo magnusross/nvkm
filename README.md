@@ -4,11 +4,9 @@ Python + Jax implementation of the nonparametric Volterra kernels model (NVKM).
 
 Requirements
 ------------
-You can make a new virtual environment and install the requirements by running,
+You can install the requirements by running,
 
 ```
-virtualenv -p python3 nvkmenv
-source nvkmenv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -42,7 +40,7 @@ python water_tank_experiment.py
 python weather_experiment.py
 ```
 
-which will produce a variety of plots (in `plots` directory) and metrics, as well as a .pkl file (in the `pretrained_models` directory) containing the model. *Warning* this takes quite a while to run especially if not on the GPU. 
+which will produce a variety of plots (in `plots` directory) and metrics, as well as a `.pkl` file (in the `pretrained_models` directory) containing the model. *Warning* this takes quite a while to run especially if not on the GPU. 
 
 Training other models
 ---------------------

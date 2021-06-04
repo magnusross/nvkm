@@ -24,7 +24,6 @@ def generate_volterra_data(path: str = os.path.join("data", "volt"),):
     key1, key2 = jrnd.split(jrnd.PRNGKey(0), 2)
     for rep in range(0, 10):
 
-        #%%
         gp1D = EQApproxGP(
             z=None, v=None, amp=1.0, ls=0.5, noise=0.0001, N_basis=50, D=1
         )
@@ -59,7 +58,7 @@ def generate_volterra_data(path: str = os.path.join("data", "volt"),):
         fyc1 = jit(lambda x: trapz_int(x, G1, gp_forcing, Nint, decay=3.0))
         fyc2 = jit(lambda x: trapz_int(x, G2, gp_forcing, Nint, decay=3.0))
         fyc3 = jit(lambda x: trapz_int(x, G3, gp_forcing, Nint, decay=3.0))
-        #%%
+
         yc1 = vmap(fyc1)(t)
         yc2 = vmap(fyc2)(t)
         yc3 = vmap(fyc3)(t)
@@ -68,9 +67,9 @@ def generate_volterra_data(path: str = os.path.join("data", "volt"),):
         y = 5 * yc1 * yc2 + 5 * yc3 ** 3
         y = jnp.minimum(y, 1 * jnp.ones_like(y)) + 0.05 * jrnd.normal(key2, (N,))
         _, key2 = jrnd.split(key2)
-        # %%
+
         # plt.plot(tg, G3(tg) * G3(tg) * G3(tg))
-        #%%
+
         Ntr = 400
         all_idx = jnp.arange(N)
         tridx = jrnd.choice(key2, all_idx, (Ntr,), replace=False)
@@ -188,7 +187,6 @@ class WeatherDataSet(MODataSet):
 
         all_x = [jnp.array(x[0].flatten()) for x in data["xT"]]
         all_y = [jnp.array(y[0].flatten()) for y in data["yT"]]
-        #%%
 
         train_x = copy.deepcopy(all_x)
         train_y = copy.deepcopy(all_y)

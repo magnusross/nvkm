@@ -1,4 +1,3 @@
-#%%
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 from nvkm.utils import l2p, make_zg_grids, RMSE, NMSE, gaussian_NLPD
@@ -24,7 +23,6 @@ def main(args):
     plot_path = os.path.join("plots", args.f_name)
     model_path = os.path.join("pretrained_models", args.f_name)
 
-    # %%
     O = data.O
     C = len(args.Nvgs)
 
@@ -48,7 +46,7 @@ def main(args):
         ampu=1.0,
         N_basis=args.Nbasis,
     )
-    #%%
+
     model.fit(
         args.Nits, args.lr, args.Nbatch, args.Ns, dont_fit=["lsu", "noise"], key=keys[1]
     )
@@ -81,8 +79,7 @@ def main(args):
         key=keys[3],
     )
 
-    #%%
-    spreds = model.predict(data.stest_x, 5, key=keys[4])
+    spreds = model.predict(data.stest_x, 50, key=keys[4])
     _, pred_mean = data.upscale(data.stest_x, spreds[0])
     pred_var = data.upscale_variance(spreds[1])
 
@@ -102,7 +99,7 @@ def main(args):
         )
 
     plt.savefig(plot_path + "_preds.pdf")
-    # %%
+
     print(f"Cambermet NMSE: {NMSE(pred_mean[1], data.test_y[1]):.2f}")
     print(f"Chimet NMSE: {NMSE(pred_mean[2], data.test_y[2]):.2f}")
     print(
@@ -113,7 +110,6 @@ def main(args):
     )
 
 
-# %%
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Weather MO experiment.")
     parser.add_argument(

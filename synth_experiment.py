@@ -1,4 +1,3 @@
-#%%
 from nvkm.models import MOVarNVKM, EQApproxGP
 from nvkm.utils import l2p, NMSE, make_zg_grids, gaussian_NLPD
 from nvkm.experiments import load_volterra_data
@@ -15,8 +14,6 @@ import scipy as osp
 import pickle
 from pathlib import Path
 import os
-
-#%%
 
 
 def main(args):
@@ -53,7 +50,6 @@ def main(args):
         N_basis=args.Nbasis,
     )
 
-    #%%
     model.fit(
         args.Nits,
         args.lr,
@@ -101,14 +97,14 @@ def main(args):
         jnp.linspace(-max(args.zgrange), max(args.zgrange), 100), 10, key=keys[3],
     )
     plt.savefig(plot_path + "_filters.pdf")
-    # %%
+
     m, s = model.predict([x_test], 50)
-    # %%
+
     test_nmse = NMSE(m[0], y_test)
     test_nlpd = gaussian_NLPD(m[0], s[0], y_test)
     print("Test NMSE:", test_nmse)
     print("Test NLPD:", test_nlpd)
-    # %%
+
     pred_name = "rep" + str(args.rep) + "predictions.csv"
     odir = Path(os.path.join(preds_path, "nvkmC" + str(C)))
     odir.mkdir(parents=True, exist_ok=True)

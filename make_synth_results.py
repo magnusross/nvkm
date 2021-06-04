@@ -1,4 +1,3 @@
-#%%
 from nvkm.models import MOVarNVKM, EQApproxGP
 from nvkm.utils import l2p, RMSE, NMSE, make_zg_grids, gaussian_NLPD
 import matplotlib.pyplot as plt
@@ -19,7 +18,8 @@ plt.rcParams["font.size"] = 12
 plt.rcParams["mathtext.fontset"] = "cm"
 plt.rc("legend", fontsize=10)  # using a size in points
 plt.rc("legend", fontsize="small")
-#%%
+
+
 def main():
     alt_m_dir = os.path.join("preds", "paper", "synth")
     data_dir = os.path.join("data", "volt")
@@ -109,4 +109,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-# %%
+

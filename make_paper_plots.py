@@ -1,4 +1,3 @@
-#%%
 from nvkm.models import IOMOVarNVKM, load_io_model, load_mo_model
 from nvkm.utils import (
     l2p,
@@ -23,8 +22,6 @@ plt.rcParams["font.serif"] = ["Times New Roman"] + plt.rcParams["font.serif"]
 plt.rcParams["font.size"] = 12
 plt.rcParams["mathtext.fontset"] = "cm"
 
-#%%
-
 
 def plot_tanks():
     data = pd.read_csv(os.path.join("data", "water_tanks.csv"))
@@ -35,7 +32,7 @@ def plot_tanks():
     model = load_io_model(
         os.path.join("pretrained_models", "paper", "tank_paper_model.pkl")
     )
-    # %%
+
     tf = jnp.linspace(-0.5, 0.5, 100)
 
     tfs = [
@@ -47,10 +44,10 @@ def plot_tanks():
         y_std * model.ampgs[0][i] * jnp.exp(-model.alpha[0][i] * (tf) ** 2) * gi.T
         for i, gi in enumerate(raw_g_samps)
     ]
-    #%%
+
     g_means = [jnp.mean(gi, axis=0) for gi in g_samps]
     g_std = [jnp.std(gi, axis=0) for gi in g_samps]
-    # %%
+
     fig = plt.figure(constrained_layout=True, figsize=(12, 4))
     gs = fig.add_gridspec(5, model.C[0])
 
@@ -93,13 +90,11 @@ def plot_tanks():
     plt.savefig(os.path.join("plots", "paper", "tanks.pdf"))
 
 
-# %%
 def plot_weather():
     data_set = WeatherDataSet("data")
     model = load_mo_model(
         os.path.join("pretrained_models", "paper", "weather_paper_model.pkl")
     )
-    # %%
 
     train_x = [d[1::4] for d in data_set.train_x]
     strain_x = [d[1::4] for d in data_set.strain_x]
@@ -110,7 +105,6 @@ def plot_weather():
     spreds = model.predict(data_set.stest_x, 15)
     _, pred_mean = data_set.upscale(data_set.stest_x, spreds[0])
     pred_var = data_set.upscale_variance(spreds[1])
-    #%%
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 4))
     for i in range(1, 3):
@@ -157,7 +151,6 @@ def plot_weather():
     plt.savefig(os.path.join("plots", "paper", "weather.pdf"))
 
 
-# %%
 if __name__ == "__main__":
     print("Plotting weather...")
     plot_weather()

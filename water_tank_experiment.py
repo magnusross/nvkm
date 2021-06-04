@@ -1,4 +1,3 @@
-#%%
 from nvkm.utils import l2p, make_zg_grids, RMSE, gaussian_NLPD
 from nvkm.models import IOMOVarNVKM
 
@@ -52,7 +51,6 @@ def main(args):
     lsu = zu[0][0] - zu[1][0]
 
     tgs, lsgs = make_zg_grids(args.zgrange, args.Nvgs)
-    # %%
 
     model = IOMOVarNVKM(
         [tgs],
@@ -89,26 +87,24 @@ def main(args):
         key=keys[2],
     )
     model.save(model_path + "_model.pkl")
-    # %%
+
     tp_train = jnp.linspace(-args.zurange, args.zurange, 400)
     tp_test = tp_train + t_offset
     axs = model.plot_samples(tp_train, [tp_train], 10, return_axs=True, key=keys[2])
     axs[0].set_xlim([-args.zurange, args.zurange])
     axs[1].set_xlim([-args.zurange, args.zurange])
     plt.savefig(plot_path + "_samps_train.pdf")
-    #%%
+
     axs = model.plot_samples(tp_test, [tp_test], 10, return_axs=True, key=keys[3])
     axs[0].set_xlim([t_offset - args.zurange, t_offset + args.zurange])
     axs[1].set_xlim([t_offset - args.zurange, t_offset + args.zurange])
     axs[1].plot(ytest[0][0], ytest[1][0], c="black", ls=":")
     plt.savefig(plot_path + "_samps_test.pdf")
     # axs[1].xrange(18, 22)
-    #%%
 
     p_samps = model.sample(ytest[0], 50, key=keys[4])
     u_samps_tr, p_samps_tr = model.joint_sample(utrain[0], ytrain[0], 50, key=keys[5])
 
-    #%%
     scaled_samps = p_samps[0] * y_std + y_mean
     pred_mean = jnp.mean(scaled_samps, axis=1)
     pred_std = jnp.std(scaled_samps, axis=1)
@@ -135,13 +131,13 @@ def main(args):
         gaussian_NLPD(pred_mean_tr, pred_var_tr, jnp.array(data["yEst"]))
         + gaussian_NLPD(u_pred_mean_tr, u_pred_var_tr, jnp.array(data["uEst"]))
     ) / 2
-    #%%
+
     print("Train RMSE: %.3f" % rmse_tr)
     print("Train NLPD: %.3f" % nlpd_tr)
 
     print("RMSE: %.3f" % rmse)
     print("NLPD: %.3f" % nlpd)
-    #%%
+
     fig = plt.figure(figsize=(12, 4))
     plt.plot(data["Ts"], data["yVal"], c="black", ls=":", label="Val. Data")
     plt.plot(data["Ts"], pred_mean, c="green", label="Pred. Mean")
@@ -160,12 +156,11 @@ def main(args):
     plt.legend()
     plt.savefig(plot_path + "_preds.pdf")
     plt.show()
-    #%%
+
     tf = jnp.linspace(-max(args.zgrange), max(args.zgrange), 100)
     model.plot_filters(tf, 15, save=plot_path + "_filters.pdf", key=keys[6])
 
 
-# %%
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Water tank IO experiment.")
     parser.add_argument(
