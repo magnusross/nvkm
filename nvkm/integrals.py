@@ -2,7 +2,7 @@ from jax import jit, vmap
 import jax.numpy as jnp
 from jax import lax
 from jax import config
-from .utils import map_reduce, map_reduce_1vec, vmap_scan
+from nvkm.utils import map_reduce
 import operator
 
 config.update("jax_enable_x64", True)
@@ -10,6 +10,9 @@ config.update("jax_enable_x64", True)
 
 @jit
 def integ_1a(t, alpha, thet1, thet2, beta2):
+    """
+    Implements integral 1A from the supplementary material.
+    """
     coeff = 0.5 * jnp.sqrt(jnp.pi / alpha)
     ea1 = lax.complex(-((thet1 + thet2) ** 2) / (4.0 * alpha), -beta2 - t * thet2)
     ea2 = lax.complex((thet1 * thet2) / alpha, 2 * (beta2 + t * thet2))
@@ -18,6 +21,9 @@ def integ_1a(t, alpha, thet1, thet2, beta2):
 
 @jit
 def integ_1b(t, alpha, thet1, p2, z2):
+    """
+    Implements integral 1B from the supplementary material.
+    """
     coeff = jnp.sqrt(jnp.pi / (alpha + p2))
     ear = -(thet1 ** 2 + 4 * alpha * p2 * (t - z2) ** 2)
     eai = 4 * p2 * (t * thet1 - thet1 * z2)
@@ -26,6 +32,9 @@ def integ_1b(t, alpha, thet1, p2, z2):
 
 @jit
 def integ_2a(t, alpha, p1, z1, thet2, beta2):
+    """
+    Implements integral 2A from the supplementary material.
+    """
     coeff = jnp.sqrt(jnp.pi / (alpha + p1))
     ea = -(4 * alpha * p1 * z1 ** 2 + thet2 ** 2) / (4 * (alpha + p1))
     ca = thet2 * (t - (p1 * z1) / (alpha + p1)) + beta2
@@ -34,6 +43,9 @@ def integ_2a(t, alpha, p1, z1, thet2, beta2):
 
 @jit
 def integ_2b(t, alpha, p1, z1, p2, z2):
+    """
+    Implements integral 2B from the supplementary material.
+    """
     coeff = jnp.sqrt(jnp.pi / (alpha + p1 + p2))
     ea1 = alpha * (p1 * z1 ** 2 + p2 * (t - z2) ** 2)
     ea2 = p1 * p2 * (z1 + z2 - t) ** 2
@@ -43,6 +55,9 @@ def integ_2b(t, alpha, p1, z1, p2, z2):
 def slow_I1(
     t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
 ):
+    """
+    Slow implementation of integral 1 from supplementary material for testing.
+    """
     c = thetag.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
     Mu = zus.shape[0]
@@ -62,7 +77,6 @@ def slow_I1(
             onb += qus[n] * integ_1b(t, alpha, -1.0 * thetag[i], pu, zus[n])
         o1 *= opa + sigu ** 2 * opb
         o2 *= ona + sigu ** 2 * onb
-        print(o1, o2)
     out = 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
     return out
 
@@ -71,8 +85,9 @@ def slow_I1(
 def fast_I1(
     t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
 ):
-    # number of basis functions
-
+    """
+    Fast implementation of integral 1 from supplementary material.
+    """
     o = vmap(
         lambda thetgij: map_reduce(
             lambda wui, thetui, betaui: wui
@@ -92,6 +107,9 @@ def fast_I1(
 
 
 def slow_I2(t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
+    """
+    Slow implementation of integral 2 from supplementary material for testing.
+    """
     c = zg.shape[0]  # order of the term
     Nl = wus.shape[0]  # number of basis functions
     Mu = zus.shape[0]  # number of u inducing points
@@ -113,6 +131,9 @@ def slow_I2(t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
 
 @jit
 def fast_I2(t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
+    """
+    Fast implementation of integral 2 from supplementary material.
+    """
     o1 = vmap(
         lambda zgij: map_reduce(
             lambda wi, thetui, betaui: wi
@@ -151,6 +172,9 @@ def slow_I(
     pg=1.0,
     pu=1.0,
 ):
+    """
+    Slow implementation of Eqn 5 for testing.
+    """
     Nl = wgs.shape[0]
     Mg = zgs.shape[0]
 
@@ -196,6 +220,9 @@ def fast_I(
     pg,
     pu,
 ):
+    """
+    Fast implementation of Eqn 5.
+    """
 
     o1 = vmap(
         lambda thetagi, betagi, wgi,: wgi
