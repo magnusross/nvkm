@@ -12,7 +12,7 @@ from jax import jit, value_and_grad, vmap
 from jax.config import config
 
 
-from .integrals import Full
+from .integrals import Full, Homogeneous
 from .settings import JITTER
 from .utils import choleskyize, eq_kernel, l2p, map2matrix
 from .vi import (
@@ -551,6 +551,134 @@ class MOVarNVKM:
             [jnp.vstack((tf for j in range(gp.D))).T for gp in self.g_gps[i]]
             for i in range(self.O)
         ]
+        g_samps = self.sample_diag_g_gps(tfs, N_s, jrnd.split(key, 2))
+
+        _, axs = plt.subplots(
+            ncols=max(self.C),
+            nrows=self.O,
+            figsize=(4 * max(self.C), 2 * self.O),
+        )
+        if max(self.C) == 1 and self.O == 1:
+            y = g_samps[0][0].T * jnp.exp(-self.alpha[0][0] * (tf) ** 2)
+            axs.plot(tf, y.T, c="red", alpha=0.5)
+            axs.set_title("$G_{%s, %s}$" % (1, 1))
+
+        elif max(self.C) == 1:
+            for i in range(self.O):
+                y = g_samps[i][0].T * jnp.exp(-self.alpha[i][0] * (tf) ** 2)
+                axs[i].plot(tf, y.T, c="red", alpha=0.5)
+                axs[i].set_title("$G_{%s, %s}$" % (i + 1, 1))
+
+        elif self.O == 1:
+            for j in range(self.C[0]):
+                y = g_samps[0][j].T * jnp.exp(-self.alpha[0][j] * (tf) ** 2)
+                axs[j].plot(tf, y.T, c="red", alpha=0.5)
+                axs[j].set_title("$G_{%s, %s}$" % (1, j + 1))
+
+        else:
+            for i in range(self.O):
+                for j in range(self.C[i]):
+                    y = g_samps[i][j].T * jnp.exp(-self.alpha[i][j] * (tf) ** 2)
+                    axs[i][j].plot(tf, y.T, c="red", alpha=0.5)
+                    axs[i][j].set_title("$G_{%s, %s}$" % (i + 1, j + 1))
+                for k in range(self.C[i], max(self.C)):
+                    axs[i][k].axis("off")
+
+        plt.tight_layout()
+
+        if return_axs:
+            return axs
+
+        if save:
+            plt.savefig(save)
+        plt.show()
+
+
+class SepHomogMOVarNVKM(MOVarNVKM):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def set_G_gps(self, ampgs, lsgs):
+        return [
+            [
+                EQApproxGP(
+                    z=self.zgs[i][j],
+                    v=None,
+                    N_basis=self.N_basis,
+                    D=1,
+                    ls=lsgs[i][j],
+                    amp=1.0,
+                )
+                for j in range(self.C[i])
+            ]
+            for i in range(self.O)
+        ]
+
+    @partial(jit, static_argnums=(0, 7))
+    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, keys):
+
+        # skey = jrnd.split(keys, 0)
+        v_samps = self.q_of_v.sample(q_pars, N_s, keys[0])
+
+        u_gp = self.u_gp
+        thetaul, betaul, wul = u_gp.sample_basis(keys[1], N_s, ampu, lsu)
+
+        _, u_LKvv = u_gp.compute_covariances(ampu, lsu)
+
+        qul = vmap(lambda vui, thi, bi, wi: u_gp.compute_q(vui, u_LKvv, thi, bi, wi))(
+            v_samps["u"], thetaul, betaul, wul
+        )
+
+        samps = []
+        for i in range(self.O):
+            if ts[i] is None:
+                samps.append(None)
+                continue
+            sampsi = jnp.zeros((len(ts[i]), N_s))
+            for j in range(0, self.C[i]):
+                keys = jrnd.split(keys[-1], 2)
+                G_gp_i = self.g_gps[i][j]
+
+                thetagl, betagl, wgl = G_gp_i.sample_basis(
+                    keys[0], N_s, 1.0, lsgs[i][j]
+                )
+                _, G_LKvv = G_gp_i.compute_covariances(1.0, lsgs[i][j])
+
+                qgl = vmap(
+                    lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
+                )(v_samps["gs"][i][j], thetagl, betagl, wgl)
+                # samps += jnp.zeros((len(t), N_s))
+
+                sampsi += (
+                    ampgs[i][j] ** (j + 1)
+                    * Homogeneous.I(
+                        ts[i],
+                        G_gp_i.z,
+                        u_gp.z,
+                        thetagl,
+                        betagl,
+                        thetaul,
+                        betaul,
+                        wgl,
+                        qgl,
+                        wul,
+                        qul,
+                        1.0,
+                        ampu,
+                        self.alpha[i][j],
+                        l2p(lsgs[i][j]),
+                        l2p(lsu),
+                    )
+                    ** (j + 1)
+                )
+                # id_print(sampsi)
+            samps.append(sampsi)
+        return samps
+
+    def plot_filters(
+        self, tf, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(211)
+    ):
+        tfs = [[tf for gp in self.g_gps[i]] for i in range(self.O)]
         g_samps = self.sample_diag_g_gps(tfs, N_s, jrnd.split(key, 2))
 
         _, axs = plt.subplots(

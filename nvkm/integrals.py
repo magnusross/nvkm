@@ -388,6 +388,11 @@ class Separable:
 
     @classmethod
     @partial(jit, static_argnums=(0,))
+    @partial(
+        jnp.vectorize,
+        excluded=(0, 1, 2, 3, 6, 7, 10, 11, 12, 13, 14),
+        signature="(k),(k),(k),(k)->()",
+    )
     def single_I(
         cls,
         t,
@@ -401,8 +406,6 @@ class Separable:
         qgs,
         wus,
         qus,
-        sigg,
-        sigu,
         alpha,
         pg,
         pu,
@@ -451,22 +454,90 @@ class Separable:
     @partial(jit, static_argnums=(0,))
     def I(
         cls,
-        t,
-        azgl,  # C x Ns x Nv
-        zul,  # Ns x Nv
-        athetgl,  # C x Ns x Nb
-        abetagl,  # C x Ns x Nb
-        thetul,  # Ns x Nb
+        ts,
+        zgs,
+        zus,
+        athetagl,  # Ns x C x Nb
+        abetagl,  # Ns x C x Nb
+        thetaul,  # Ns x Nb
         betaul,  # Ns x Nb
-        awgl,  # C x Ns x Nb
-        aqgl,  # C x Ns x Nv
+        awgl,  # Ns x C x Nb
+        aqgl,  # Ns x C x Nv
         wul,  # Ns x Nb
         qul,  # Ns x Nb
-        sigg,
-        sigu,
         alpha,
         pg,
         pu,
     ):
 
-        pass
+        return vmap(
+            lambda ti: vmap(
+                lambda athetags, abetags, thetaus, betaus, awgs, aqgs, wus, qus: jnp.prod(
+                    cls.single_I(
+                        ti,
+                        zgs,
+                        zus,
+                        athetags,
+                        abetags,
+                        thetaus,
+                        betaus,
+                        awgs,
+                        aqgs,
+                        wus,
+                        qus,
+                        alpha,
+                        pg,
+                        pu,
+                    )
+                )
+            )(athetagl, abetagl, thetaul, betaul, awgl, aqgl, wul, qul)
+        )(
+            ts,
+        )
+
+
+class Homogeneous(Separable):
+    @classmethod
+    @partial(jit, static_argnums=(0,))
+    def I(
+        cls,
+        ts,
+        zgs,
+        zus,
+        thetagl,  # Ns x Nb
+        betagl,  # Ns x Nb
+        thetaul,  # Ns x Nb
+        betaul,  # Ns x Nb
+        wgl,  # Ns x Nb
+        qgl,  # Ns x Nv
+        wul,  # Ns x Nb
+        qul,  # Ns x Nb
+        alpha,
+        pg,
+        pu,
+    ):
+
+        return vmap(
+            lambda ti: vmap(
+                lambda athetags, abetags, thetaus, betaus, awgs, aqgs, wus, qus: jnp.prod(
+                    cls.single_I(
+                        ti,
+                        zgs,
+                        zus,
+                        athetags,
+                        abetags,
+                        thetaus,
+                        betaus,
+                        awgs,
+                        aqgs,
+                        wus,
+                        qus,
+                        alpha,
+                        pg,
+                        pu,
+                    )
+                )
+            )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
+        )(
+            ts,
+        )
