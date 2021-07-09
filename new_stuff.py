@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import jax.random as jrnd
 from jax import jit, vmap
 from nvkm.utils import map2matrix
-from nvkm.integrals import Separable
+from nvkm.integrals import Separable, Homogeneous, Full
 from functools import partial
 
 
@@ -23,59 +23,14 @@ def data_maker():
         "t": 0.1,
         "zgs": jrnd.uniform(key, shape=(8,)),
         "zus": jnp.linspace(-1.0, 1.0, 5),
-        "thetags": jrnd.normal(keys[0], shape=(10, 2, 8)),
-        "betags": jrnd.uniform(
-            keys[1],
-            shape=(
-                10,
-                2,
-                8,
-            ),
-        ),
-        "thetus": jrnd.normal(
-            keys[2],
-            shape=(
-                10,
-                5,
-            ),
-        ),
-        "betaus": jrnd.uniform(
-            keys[3],
-            shape=(
-                10,
-                5,
-            ),
-        ),
-        "wgs": jrnd.normal(
-            keys[4],
-            shape=(
-                10,
-                2,
-                8,
-            ),
-        ),
-        "qgs": jrnd.normal(
-            keys[5],
-            shape=(
-                10,
-                2,
-                8,
-            ),
-        ),
-        "wus": jrnd.normal(
-            keys[6],
-            shape=(
-                10,
-                5,
-            ),
-        ),
-        "qus": jrnd.normal(
-            keys[7],
-            shape=(
-                10,
-                5,
-            ),
-        ),
+        "thetags": jrnd.normal(keys[0], shape=(11,)),
+        "betags": jrnd.uniform(keys[1], shape=(11,),),
+        "thetus": jrnd.normal(keys[2], shape=(5,),),
+        "betaus": jrnd.uniform(keys[3], shape=(5,),),
+        "wgs": jrnd.normal(keys[4], shape=(11,),),
+        "qgs": jrnd.normal(keys[5], shape=(8,),),
+        "wus": jrnd.normal(keys[6], shape=(5,),),
+        "qus": jrnd.normal(keys[7], shape=(5,),),
         "sigg": 1.0,
     }
 
@@ -84,12 +39,7 @@ data = data_maker()
 
 
 @partial(
-    jnp.vectorize,
-    excluded=(
-        1,
-        2,
-    ),
-    signature="(k)->()",
+    jnp.vectorize, excluded=(1, 2,), signature="(k)->()",
 )
 def f(a, b, c):
     return jnp.sum(a * b * c)
@@ -108,8 +58,8 @@ def f(a, b, c):
 # jnp.vectorize(lambda a, b: a * jnp.dot(b, b), signature="(k)->()", excluded=(0,))(
 #     10.0, jnp.ones((100, 100, 10))
 # )
-Separable.I(
-    jnp.ones(100),
+a = Homogeneous.single_I(
+    0.1,
     data["zgs"],
     data["zus"],
     data["thetags"],
@@ -123,4 +73,41 @@ Separable.I(
     data["sigg"],
     1.1,
     1.2,
-).shape
+)
+
+b = Homogeneous.slow_single_I(
+    0.1,
+    data["zgs"],
+    data["zus"],
+    data["thetags"],
+    data["betags"],
+    data["thetus"],
+    data["betaus"],
+    data["wgs"],
+    data["qgs"],
+    data["wus"],
+    data["qus"],
+    data["sigg"],
+    1.1,
+    1.2,
+)
+
+
+c = Full.fast_I(
+    0.1,
+    data["zgs"].reshape(-1, 1),
+    data["zus"],
+    data["thetags"].reshape(-1, 1),
+    data["betags"],
+    data["thetus"],
+    data["betaus"],
+    data["wgs"],
+    data["qgs"],
+    data["wus"],
+    data["qus"],
+    1.0,
+    1.0,
+    data["sigg"],
+    1.1,
+    1.2,
+)

@@ -150,3 +150,12 @@ def make_zg_grids(zgran: list, Nvgs: list):
         tgs.append(jnp.vstack([tm2[k].flatten() for k in range(i + 1)]).T)
     return tgs, lsgs
 
+
+def make_zg_grids1D(zgran: list, Nvgs: list):
+    tgs = []
+    lsgs = []
+    for i in range(len(Nvgs)):
+        tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i]).reshape(-1, 1)
+        lsgs.append((tg[1][0] - tg[0][0]))
+        tgs.append(tg)
+    return tgs, lsgs

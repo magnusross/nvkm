@@ -56,19 +56,7 @@ class Full:
 
     @classmethod
     def slow_I1(
-        cls,
-        t,
-        zus,
-        thetag,
-        betag,
-        thetus,
-        betaus,
-        wus,
-        qus,
-        sigg,
-        sigu,
-        alpha,
-        pu,
+        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
     ):
         """
         Slow implementation of integral 1 from supplementary material for testing.
@@ -100,19 +88,7 @@ class Full:
     @classmethod
     @partial(jit, static_argnums=(0,))
     def fast_I1(
-        cls,
-        t,
-        zus,
-        thetag,
-        betag,
-        thetus,
-        betaus,
-        wus,
-        qus,
-        sigg,
-        sigu,
-        alpha,
-        pu,
+        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
     ):
         """
         Fast implementation of integral 1 from supplementary material.
@@ -230,18 +206,7 @@ class Full:
             )
         for j in range(Mg):
             out += qgs[j] * cls.slow_I2(
-                t,
-                zgs[j],
-                zus,
-                thetus,
-                betaus,
-                wus,
-                qus,
-                sigg,
-                sigu,
-                alpha,
-                pg,
-                pu,
+                t, zgs[j], zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,
             )
         return out
 
@@ -286,32 +251,14 @@ class Full:
                 alpha,
                 pu,
             )
-        )(
-            thetags,
-            betags,
-            wgs,
-        )
+        )(thetags, betags, wgs,)
 
         o2 = vmap(
             lambda zgi, qgi: qgi
             * cls.fast_I2(
-                t,
-                zgi,
-                zus,
-                thetus,
-                betaus,
-                wus,
-                qus,
-                sigg,
-                sigu,
-                alpha,
-                pg,
-                pu,
+                t, zgi, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,
             )
-        )(
-            zgs,
-            qgs,
-        )
+        )(zgs, qgs,)
 
         return jnp.sum(o1) + jnp.sum(o2)
 
@@ -357,9 +304,7 @@ class Full:
                     pu,
                 )
             )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
-        )(
-            ts,
-        )
+        )(ts,)
 
 
 class Separable:
@@ -383,16 +328,73 @@ class Separable:
 
     @staticmethod
     @jit
+    def I_phi_k(t, alpha, thet1, beta1, p2, z2):
+        coeff = jnp.sqrt(jnp.pi / (alpha + p2))
+        ea = -(4 * alpha * p2 * (t - z2) ** 2 + thet1 ** 2) / (4 * (alpha + p2))
+        ca = (alpha * beta1 + p2 * (beta1 + thet1 * (t - z2))) / (alpha + p2)
+        return coeff * jnp.exp(ea) * jnp.cos(ca)
+
+    @staticmethod
+    @jit
     def I_k_k(*args):
         return Full.integ_2b(*args)
 
     @classmethod
+    def slow_single_I(
+        cls,
+        t,
+        zgs,
+        zus,
+        thetgs,
+        betags,
+        thetus,
+        betaus,
+        wgs,
+        qgs,
+        wus,
+        qus,
+        alpha,
+        pg,
+        pu,
+    ):
+        t1 = 0.0
+        for i in range(len(thetgs)):
+            for j in range(len(thetus)):
+                t1 += (
+                    wgs[i]
+                    * wus[j]
+                    * cls.I_phi_phi(
+                        t, alpha, thetgs[i], thetus[j], betags[i], betaus[j]
+                    )
+                )
+
+        t2 = 0.0
+        for i in range(len(qgs)):
+            for j in range(len(thetus)):
+                t2 += (
+                    qgs[i]
+                    * wus[j]
+                    * cls.I_k_phi(t, alpha, pg, zgs[i], thetus[j], betaus[j])
+                )
+
+        t3 = 0.0
+        for i in range(len(thetgs)):
+            for j in range(len(qus)):
+                t3 += (
+                    wgs[i]
+                    * qus[j]
+                    * cls.I_phi_k(t, alpha, thetgs[i], betags[i], pu, zus[j])
+                )
+
+        t4 = 0.0
+        for i in range(len(qgs)):
+            for j in range(len(qus)):
+                t4 += qgs[i] * qus[j] * cls.I_k_k(t, alpha, pg, zgs[i], pu, zus[j],)
+        Nl = len(thetgs)
+        return t1 + (t2 + t3) + t4
+
+    @classmethod
     @partial(jit, static_argnums=(0,))
-    @partial(
-        jnp.vectorize,
-        excluded=(0, 1, 2, 3, 6, 7, 10, 11, 12, 13, 14),
-        signature="(k),(k),(k),(k)->()",
-    )
     def single_I(
         cls,
         t,
@@ -410,6 +412,7 @@ class Separable:
         pg,
         pu,
     ):
+        Nl = thetgs.shape[-1]
         t1 = jnp.sum(
             vmap(
                 lambda wgi, thetgi, betagi: vmap(
@@ -435,7 +438,7 @@ class Separable:
                 lambda wgi, thetgi, betagi: vmap(
                     lambda qui, zui: qui
                     * wgi
-                    * cls.I_k_phi(t, alpha, pu, zui, thetgi, betagi)
+                    * cls.I_phi_k(t, alpha, thetgi, betagi, pu, zui)
                 )(qus, zus)
             )(wgs, thetgs, betags)
         )
@@ -449,6 +452,15 @@ class Separable:
         )
 
         return t1 + t2 + t3 + t4
+
+    @classmethod
+    @partial(
+        jnp.vectorize,
+        excluded=(0, 1, 2, 3, 6, 7, 10, 11, 12, 13, 14),
+        signature="(k),(k),(k),(k)->()",
+    )
+    def vec_single_I(cls, *args):
+        return cls.single_I(*args)
 
     @classmethod
     @partial(jit, static_argnums=(0,))
@@ -473,7 +485,7 @@ class Separable:
         return vmap(
             lambda ti: vmap(
                 lambda athetags, abetags, thetaus, betaus, awgs, aqgs, wus, qus: jnp.prod(
-                    cls.single_I(
+                    cls.vec_single_I(
                         ti,
                         zgs,
                         zus,
@@ -491,9 +503,7 @@ class Separable:
                     )
                 )
             )(athetagl, abetagl, thetaul, betaul, awgl, aqgl, wul, qul)
-        )(
-            ts,
-        )
+        )(ts,)
 
 
 class Homogeneous(Separable):
@@ -538,6 +548,5 @@ class Homogeneous(Separable):
                     )
                 )
             )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
-        )(
-            ts,
-        )
+        )(ts,)
+

@@ -10,7 +10,7 @@ import jax.scipy as jsp
 import matplotlib.pyplot as plt
 from jax import jit, value_and_grad, vmap
 from jax.config import config
-
+from jax.experimental.host_callback import id_print
 
 from .integrals import Full, Homogeneous
 from .settings import JITTER
@@ -308,14 +308,7 @@ class MOVarNVKM:
             for j, gp in enumerate(self.g_gps[i]):
                 keys = jrnd.split(keys[1])
                 il.append(
-                    gp._sample(
-                        ts[i][j],
-                        vs[i][j],
-                        1.0,
-                        self.lsgs[i][j],
-                        N_s,
-                        keys[1],
-                    )
+                    gp._sample(ts[i][j], vs[i][j], 1.0, self.lsgs[i][j], N_s, keys[1],)
                 )
             samps.append(il)
 
@@ -480,12 +473,7 @@ class MOVarNVKM:
 
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
-            value, grads = grad_fn(
-                (x_bs, y_bs),
-                *bound_arg,
-                N_s,
-                skey,
-            )
+            value, grads = grad_fn((x_bs, y_bs), *bound_arg, N_s, skey,)
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
@@ -496,6 +484,7 @@ class MOVarNVKM:
 
             opt_state = opt_update(i, grads, opt_state)
 
+        print(bound_arg[1])
         for i, ix in enumerate(dpars_argnum):
             bound_arg[ix - 1] = get_params(opt_state)[i]
 
@@ -554,9 +543,7 @@ class MOVarNVKM:
         g_samps = self.sample_diag_g_gps(tfs, N_s, jrnd.split(key, 2))
 
         _, axs = plt.subplots(
-            ncols=max(self.C),
-            nrows=self.O,
-            figsize=(4 * max(self.C), 2 * self.O),
+            ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
             y = g_samps[0][0].T * jnp.exp(-self.alpha[0][0] * (tf) ** 2)
@@ -642,20 +629,20 @@ class SepHomogMOVarNVKM(MOVarNVKM):
                 thetagl, betagl, wgl = G_gp_i.sample_basis(
                     keys[0], N_s, 1.0, lsgs[i][j]
                 )
+
                 _, G_LKvv = G_gp_i.compute_covariances(1.0, lsgs[i][j])
 
                 qgl = vmap(
                     lambda vgi, thi, bi, wi: G_gp_i.compute_q(vgi, G_LKvv, thi, bi, wi)
                 )(v_samps["gs"][i][j], thetagl, betagl, wgl)
-                # samps += jnp.zeros((len(t), N_s))
-
                 sampsi += (
-                    ampgs[i][j] ** (j + 1)
+                    ampu
+                    * ampgs[i][j] ** (j + 1)
                     * Homogeneous.I(
                         ts[i],
                         G_gp_i.z,
                         u_gp.z,
-                        thetagl,
+                        thetagl[:, :, 0],
                         betagl,
                         thetaul,
                         betaul,
@@ -663,28 +650,25 @@ class SepHomogMOVarNVKM(MOVarNVKM):
                         qgl,
                         wul,
                         qul,
-                        1.0,
-                        ampu,
                         self.alpha[i][j],
                         l2p(lsgs[i][j]),
                         l2p(lsu),
                     )
                     ** (j + 1)
                 )
-                # id_print(sampsi)
+
             samps.append(sampsi)
+
         return samps
 
     def plot_filters(
         self, tf, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(211)
     ):
-        tfs = [[tf for gp in self.g_gps[i]] for i in range(self.O)]
+        tfs = [[tf.reshape(-1, 1) for gp in self.g_gps[i]] for i in range(self.O)]
         g_samps = self.sample_diag_g_gps(tfs, N_s, jrnd.split(key, 2))
 
         _, axs = plt.subplots(
-            ncols=max(self.C),
-            nrows=self.O,
-            figsize=(4 * max(self.C), 2 * self.O),
+            ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
             y = g_samps[0][0].T * jnp.exp(-self.alpha[0][0] * (tf) ** 2)
@@ -744,10 +728,7 @@ class IOMOVarNVKM(MOVarNVKM):
             u_noise (float, optional): noise for input process. Defaults to 1.0.
         """
         super().__init__(
-            zgs,
-            zu,
-            None,
-            **kwargs,
+            zgs, zu, None, **kwargs,
         )
         self.u_noise = u_noise
         self.data = (u_data, y_data)
@@ -762,15 +743,7 @@ class IOMOVarNVKM(MOVarNVKM):
 
     def joint_sample(self, tu, tys, N_s, key=jrnd.PRNGKey(1)):
         return self._joint_sample(
-            tu,
-            tys,
-            self.q_pars,
-            self.ampgs,
-            self.lsgs,
-            self.ampu,
-            self.lsu,
-            N_s,
-            key,
+            tu, tys, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key,
         )
 
     @partial(jit, static_argnums=(0, 9))
@@ -803,13 +776,7 @@ class IOMOVarNVKM(MOVarNVKM):
         return -(KL + like)
 
     def fit(
-        self,
-        its,
-        lr,
-        batch_size,
-        N_s,
-        dont_fit=[],
-        key=jrnd.PRNGKey(1),
+        self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1),
     ):
 
         u_data, y_data = self.data
@@ -861,10 +828,7 @@ class IOMOVarNVKM(MOVarNVKM):
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
             value, grads = grad_fn(
-                ((xu_bs, yu_bs), (x_bs, y_bs)),
-                *bound_arg,
-                N_s,
-                skey,
+                ((xu_bs, yu_bs), (x_bs, y_bs)), *bound_arg, N_s, skey,
             )
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
