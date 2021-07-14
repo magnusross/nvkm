@@ -56,7 +56,7 @@ class Full:
 
     @classmethod
     def slow_I1(
-        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
+        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, alpha, pu,
     ):
         """
         Slow implementation of integral 1 from supplementary material for testing.
@@ -80,15 +80,15 @@ class Full:
             for n in range(Mu):
                 opb += qus[n] * cls.integ_1b(t, alpha, thetag[i], pu, zus[n])
                 onb += qus[n] * cls.integ_1b(t, alpha, -1.0 * thetag[i], pu, zus[n])
-            o1 *= opa + sigu ** 2 * opb
-            o2 *= ona + sigu ** 2 * onb
+            o1 *= opa + opb
+            o2 *= ona + onb
         out = 0.5 * jnp.real(jnp.exp(betag * 1j) * o1 + jnp.exp(-betag * 1j) * o2)
         return out
 
     @classmethod
     @partial(jit, static_argnums=(0,))
     def fast_I1(
-        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, sigg, sigu, alpha, pu,
+        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, alpha, pu,
     ):
         """
         Fast implementation of integral 1 from supplementary material.
@@ -101,8 +101,7 @@ class Full:
                 thetus,
                 betaus,
             )
-            + sigu ** 2
-            * map_reduce(
+            + map_reduce(
                 lambda qui, zui: qui * cls.integ_1b(t, alpha, thetgij, pu, zui),
                 qus,
                 zus,
@@ -113,7 +112,7 @@ class Full:
         return jnp.abs(o1) * jnp.cos(jnp.angle(o1) + betag)
 
     @classmethod
-    def slow_I2(cls, t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
+    def slow_I2(cls, t, zg, zus, thetus, betaus, wus, qus, alpha, pg, pu):
         """
         Slow implementation of integral 2 from supplementary material for testing.
         """
@@ -132,12 +131,12 @@ class Full:
             for n in range(Mu):
                 os2 += qus[n] * cls.integ_2b(t, alpha, pg, zg[i], pu, zus[n])
 
-            o *= os1 + sigu ** 2 * os2
-        return sigg ** 2 * o
+            o *= os1 + os2
+        return o
 
     @classmethod
     @partial(jit, static_argnums=(0,))
-    def fast_I2(cls, t, zg, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu):
+    def fast_I2(cls, t, zg, zus, thetus, betaus, wus, qus, alpha, pg, pu):
         """
         Fast implementation of integral 2 from supplementary material.
         """
@@ -152,15 +151,14 @@ class Full:
         )(zg)
 
         o2 = vmap(
-            lambda zgij: sigu ** 2
-            * map_reduce(
+            lambda zgij: map_reduce(
                 lambda qi, zui: qi * cls.integ_2b(t, alpha, pg, zgij, pu, zui),
                 qus,
                 zus,
             )
         )(zg)
 
-        return sigg ** 2 * jnp.prod((o1 + o2))
+        return jnp.prod((o1 + o2))
 
     @classmethod
     def slow_I(
@@ -176,8 +174,6 @@ class Full:
         qgs,
         wus,
         qus,
-        sigg,
-        sigu=1.0,
         alpha=1.0,
         pg=1.0,
         pu=1.0,
@@ -191,22 +187,11 @@ class Full:
         out = 0.0
         for i in range(Nl):
             out += wgs[i] * cls.slow_I1(
-                t,
-                zus,
-                thetags[i],
-                betags[i],
-                thetus,
-                betaus,
-                wus,
-                qus,
-                sigg,
-                sigu,
-                alpha,
-                pu,
+                t, zus, thetags[i], betags[i], thetus, betaus, wus, qus, alpha, pu,
             )
         for j in range(Mg):
             out += qgs[j] * cls.slow_I2(
-                t, zgs[j], zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,
+                t, zgs[j], zus, thetus, betaus, wus, qus, alpha, pg, pu,
             )
         return out
 
@@ -225,8 +210,6 @@ class Full:
         qgs,
         wus,
         qus,
-        sigg,
-        sigu,
         alpha,
         pg,
         pu,
@@ -237,27 +220,12 @@ class Full:
 
         o1 = vmap(
             lambda thetagi, betagi, wgi,: wgi
-            * cls.fast_I1(
-                t,
-                zus,
-                thetagi,
-                betagi,
-                thetus,
-                betaus,
-                wus,
-                qus,
-                sigg,
-                sigu,
-                alpha,
-                pu,
-            )
+            * cls.fast_I1(t, zus, thetagi, betagi, thetus, betaus, wus, qus, alpha, pu,)
         )(thetags, betags, wgs,)
 
         o2 = vmap(
             lambda zgi, qgi: qgi
-            * cls.fast_I2(
-                t, zgi, zus, thetus, betaus, wus, qus, sigg, sigu, alpha, pg, pu,
-            )
+            * cls.fast_I2(t, zgi, zus, thetus, betaus, wus, qus, alpha, pg, pu,)
         )(zgs, qgs,)
 
         return jnp.sum(o1) + jnp.sum(o2)
@@ -277,8 +245,6 @@ class Full:
         qgl,
         wul,
         qul,
-        ampg,
-        ampu,
         alpha,
         pg,
         pu,
@@ -297,8 +263,6 @@ class Full:
                     qgs,
                     wus,
                     qus,
-                    ampg,
-                    ampu,
                     alpha,
                     pg,
                     pu,
@@ -454,15 +418,6 @@ class Separable:
         return t1 + t2 + t3 + t4
 
     @classmethod
-    @partial(
-        jnp.vectorize,
-        excluded=(0, 1, 2, 3, 6, 7, 10, 11, 12, 13, 14),
-        signature="(k),(k),(k),(k)->()",
-    )
-    def vec_single_I(cls, *args):
-        return cls.single_I(*args)
-
-    @classmethod
     @partial(jit, static_argnums=(0,))
     def I(
         cls,
@@ -481,28 +436,29 @@ class Separable:
         pg,
         pu,
     ):
-
         return vmap(
             lambda ti: vmap(
                 lambda athetags, abetags, thetaus, betaus, awgs, aqgs, wus, qus: jnp.prod(
-                    cls.vec_single_I(
-                        ti,
-                        zgs,
-                        zus,
-                        athetags,
-                        abetags,
-                        thetaus,
-                        betaus,
-                        awgs,
-                        aqgs,
-                        wus,
-                        qus,
-                        alpha,
-                        pg,
-                        pu,
-                    )
-                )
-            )(athetagl, abetagl, thetaul, betaul, awgl, aqgl, wul, qul)
+                    vmap(
+                        lambda thetagij, betagij, wgij, qgij: cls.single_I(
+                            ti,
+                            zgs,
+                            zus,
+                            thetagij,
+                            betagij,
+                            thetaus,
+                            betaus,
+                            wgij,
+                            qgij,
+                            wus,
+                            qus,
+                            alpha,
+                            pg,
+                            pu,
+                        )
+                    )(athetags, abetags, awgs, aqgs)
+                ),
+            )(athetagl[:, :, :, 0], abetagl, thetaul, betaul, awgl, aqgl, wul, qul)
         )(ts,)
 
 

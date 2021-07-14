@@ -42,7 +42,6 @@ class TestFull:
             "qgs": jrnd.normal(keys[5], shape=(5,)),
             "wus": jrnd.normal(keys[6], shape=(5,)),
             "qus": jrnd.normal(keys[7], shape=(5,)),
-            "sigg": 1.0,
         }
 
     def test_I1(self, data_maker):
@@ -55,8 +54,6 @@ class TestFull:
             data_maker["betaus"],
             data_maker["wus"],
             data_maker["qus"],
-            data_maker["sigg"],
-            1.1,
             1.2,
             1.3,
         )
@@ -69,8 +66,6 @@ class TestFull:
             data_maker["betaus"],
             data_maker["wus"],
             data_maker["qus"],
-            data_maker["sigg"],
-            1.1,
             1.2,
             1.3,
         )
@@ -86,8 +81,6 @@ class TestFull:
             data_maker["betaus"],
             data_maker["wus"],
             data_maker["qus"],
-            data_maker["sigg"],
-            1.1,
             1.2,
             1.3,
             1.4,
@@ -100,8 +93,6 @@ class TestFull:
             data_maker["betaus"],
             data_maker["wus"],
             data_maker["qus"],
-            data_maker["sigg"],
-            1.1,
             1.2,
             1.3,
             1.4,
@@ -121,8 +112,6 @@ class TestFull:
             data_maker["qgs"],
             data_maker["wus"],
             data_maker["qus"],
-            data_maker["sigg"],
-            1.1,
             1.2,
             1.3,
             1.4,
@@ -139,8 +128,6 @@ class TestFull:
             data_maker["qgs"],
             data_maker["wus"],
             data_maker["qus"],
-            data_maker["sigg"],
-            1.1,
             1.2,
             1.3,
             1.4,

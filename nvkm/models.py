@@ -12,7 +12,7 @@ from jax import jit, value_and_grad, vmap
 from jax.config import config
 from jax.experimental.host_callback import id_print
 
-from .integrals import Full, Homogeneous
+from .integrals import Full, Homogeneous, Separable
 from .settings import JITTER
 from .utils import choleskyize, eq_kernel, l2p, map2matrix
 from .vi import (
@@ -67,20 +67,7 @@ class EQApproxGP:
 
         if self.z is None:
             pass
-
         else:
-            try:
-                assert self.z.shape[1] == self.D
-
-            except IndexError:
-                self.z = self.z.reshape(-1, 1)
-                assert self.D == 1
-
-            except AssertionError:
-                raise ValueError(
-                    "Dimension of inducing points does not match dimension of GP."
-                )
-
             self.Kvv, self.LKvv = self.compute_covariances(amp, ls)
 
     @partial(jit, static_argnums=(0,))
@@ -112,7 +99,8 @@ class EQApproxGP:
 
     @partial(jit, static_argnums=(0,))
     def phi(self, t: jnp.ndarray, theta: jnp.ndarray, beta: jnp.ndarray) -> jnp.ndarray:
-        return jnp.cos(jnp.dot(theta, t) + beta)
+        o = jnp.cos(jnp.dot(theta, t) + beta)
+        return o
 
     @partial(jit, static_argnums=(0,))
     def compute_Phi(self, thetas: jnp.ndarray, betas: jnp.ndarray) -> jnp.ndarray:
@@ -127,8 +115,10 @@ class EQApproxGP:
         betas: jnp.ndarray,
         ws: jnp.ndarray,
     ) -> jnp.ndarray:
+        # print(thetas.shape, betas.shape)
         Phi = self.compute_Phi(thetas, betas)
         b = v - Phi @ ws
+        # print(b.shape)
         return jsp.linalg.cho_solve((LKvv, True), b)
 
     @partial(jit, static_argnums=(0, 2))
@@ -178,9 +168,6 @@ class EQApproxGP:
     ) -> jnp.ndarray:
         try:
             assert t.shape[1] == self.D
-        except IndexError:
-            t = t.reshape(-1, 1)
-            assert self.D == 1
         except AssertionError:
             raise ValueError("Dimension of input does not match dimension of GP.")
 
@@ -190,6 +177,74 @@ class EQApproxGP:
             vs = self.v
 
         return self._sample(t, vs, self.amp, self.ls, Ns, key)
+
+
+class SepEQApproxGP(EQApproxGP):
+    """
+    Class for high dim (>2) that are separable, ie have a different GP for each dimension.
+    We further assume that the lengthscale and amp for each dimension is the same as well as the 
+    inducing inputs, so z is Nx1 v is NxD
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @partial(jit, static_argnums=(0, 2))
+    def sample_basis(
+        self, key: jrnd.PRNGKey, Ns: int, amp: float, ls: float
+    ) -> Tuple[jnp.ndarray]:
+        skey = jrnd.split(key, 3)
+        thetas = self.sample_thetas(skey[0], (Ns, self.D, self.N_basis, 1), ls)
+        betas = self.sample_betas(skey[1], (Ns, self.D, self.N_basis))
+        ws = self.sample_ws(skey[2], (Ns, self.D, self.N_basis), amp)
+        return thetas, betas, ws
+
+    @partial(jit, static_argnums=(0, 5))
+    def _sample(
+        self,
+        t: jnp.ndarray,
+        vs: jnp.ndarray,
+        amp: float,
+        ls: float,
+        Ns: int,
+        key: jrnd.PRNGKey,
+    ) -> jnp.ndarray:
+        # sample random parameters
+        thetas, betas, ws = self.sample_basis(key, Ns, amp, ls)
+        # fourier basis part
+        samps = vmap(
+            lambda ti: vmap(
+                lambda thi, bi, wi: vmap(
+                    lambda tij, thij, bij, wij: jnp.dot(wij, self.phi(tij, thij, bij))
+                )(ti, thi, bi, wi)
+            )(thetas, betas, ws)
+        )(jnp.expand_dims(t, 2)).swapaxes(
+            0, 1
+        )  # Nt x Ns x Nd
+
+        # canonical basis part
+        if vs is not None:
+
+            _, LKvv = self.compute_covariances(amp, ls)
+            qs = vmap(
+                lambda vi, thi, bi, wi: vmap(
+                    lambda vij, thij, bij, wij: self.compute_q(
+                        vij, LKvv, thij, bij, wij
+                    )
+                )(vi, thi, bi, wi)
+            )(
+                vs, thetas, betas, ws
+            )  # Ns x Nz x Nd
+            kv = map2matrix(
+                lambda ti, zj: vmap(lambda tij: self.kernel(tij, zj, amp, ls))(ti),
+                t,
+                self.z,
+            )  # Nt x Nd x Nz
+
+            kv = jnp.einsum("ijk, nkj->inj", qs, kv)  # Nt x Ns x Nd
+            samps += kv
+
+        return jnp.prod(samps, axis=2).T
 
 
 class VarEQApproxGP(EQApproxGP):
@@ -261,8 +316,9 @@ class VarEQApproxGP(EQApproxGP):
         Ns: int,
         key: jrnd.PRNGKey,
     ) -> jnp.ndarray:
-        vs = self._sample_vs(LC, mu, Ns, key)
-        return super()._sample(t, vs, amp, ls, Ns, key)
+        keys = jrnd.split(key, 2)
+        vs = self._sample_vs(LC, mu, Ns, keys[0])
+        return super()._sample(t, vs, amp, ls, Ns, keys[1])
 
     def sample(self, t, Ns, key):
         return self._sample(t, self.mu, self.LC, self.amp, self.ls, Ns, key)
@@ -274,6 +330,77 @@ class VarEQApproxGP(EQApproxGP):
         return vmap(lambda vui, thi, bi, wi: self.compute_q(vui, LK, thi, bi, wi))(
             vs, *basis_samps
         )
+
+
+class SepVarEQApproxGP(SepEQApproxGP, VarEQApproxGP):
+    def __init__(
+        self,
+        z,
+        mu=None,
+        LC=None,
+        N_basis: int = 500,
+        D: int = 1,
+        ls: float = 1.0,
+        amp: float = 1.0,
+        noise: float = 0.0,
+        q_frac: float = 0.8,
+        key=jrnd.PRNGKey(0),
+    ):
+        self.z = z
+        self.N_basis = N_basis
+        self.D = D
+
+        self.ls = ls
+        self.pr = l2p(ls)
+        self.amp = amp
+        self.noise = noise
+
+        self.Kvv, self.LKvv = self.compute_covariances(amp, ls)
+
+        if mu is None and LC is None:
+            # FIX
+            self.mu = jnp.zeros((z.shape[0], D))
+            self.LC = jnp.repeat(jnp.expand_dims(self.LKvv * q_frac, 2), self.D, axis=2)
+        else:
+            self.mu = mu
+            self.LC = LC
+
+    @staticmethod
+    @jit
+    def _KL(LC, mu, LK):
+        return jnp.sum(vmap(VarEQApproxGP._KL, in_axes=(2, 1, None))(LC, mu, LK))
+
+    @partial(jit, static_argnums=(0, 6))
+    def sample_qs(self, mu, LC, amp, ls, basis_samps, Ns, key):
+        vs = vmap(self._sample_vs, in_axes=(2, 1, None, 0))(
+            LC, mu, Ns, jrnd.split(key, self.D)
+        ).swapaxes(0, 1)
+        _, LK = self.compute_covariances(amp, ls)
+        return vmap(
+            lambda vi, thi, bi, wi: vmap(
+                lambda vij, thij, bij, wij: self.compute_q(vij, LK, thij, bij, wij)
+            )(vi, thi, bi, wi)
+        )(vs, *basis_samps)
+
+    @partial(jit, static_argnums=(0, 6))
+    def _sample(
+        self,
+        t: jnp.ndarray,
+        mu: jnp.ndarray,
+        LC: jnp.ndarray,
+        amp: float,
+        ls: float,
+        Ns: int,
+        key: jrnd.PRNGKey,
+    ) -> jnp.ndarray:
+        keys = jrnd.split(key, 2)
+        vsl = vmap(self._sample_vs, in_axes=(2, 1, None, 0))(
+            LC, mu, Ns, jrnd.split(keys[0], self.D)
+        ).swapaxes(0, 1)
+        return super()._sample(t, vsl, amp, ls, Ns, keys[1])
+
+    def sample(self, t, Ns, key):
+        return self._sample(t, self.mu, self.LC, self.amp, self.ls, Ns, key)
 
 
 class MOVarNVKM:
@@ -337,7 +464,7 @@ class MOVarNVKM:
 
         self.data = data
         self.likelihood = likelihood
-
+        self.I_class = Full
         # self.q_of_v = q_class()
         # if q_pars_init is None:
         #     q_pars_init = self.q_of_v.initialize(
@@ -443,10 +570,10 @@ class MOVarNVKM:
     #     )
 
     @partial(jit, static_argnums=(0, 7))
-    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, keys):
+    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, key):
 
-        # skey = jrnd.split(keys, 0)
-        u_basis_samps = self.u_gp.sample_basis(keys[0], N_s, ampu, lsu)
+        keys = jrnd.split(key, 2)
+        u_basis_samps = self.u_gp.sample_basis(keys[1], N_s, ampu, lsu)
         thetaul, betaul, wul = u_basis_samps
         # _, u_LKvv = u_gp.compute_covariances(ampu, lsu)
 
@@ -454,7 +581,7 @@ class MOVarNVKM:
         #     v_samps["u"], thetaul, betaul, wul
         # )
         qul = self.u_gp.sample_qs(
-            q_pars["mu_u"], q_pars["LC_us"], ampu, lsu, u_basis_samps, N_s, keys[1]
+            q_pars["mu_u"], q_pars["LC_us"], ampu, lsu, u_basis_samps, N_s, keys[0]
         )
         samps = []
         for i in range(self.O):
@@ -478,23 +605,25 @@ class MOVarNVKM:
                     keys[1],
                 )
 
-                sampsi += ampgs[i][j] ** (j + 1) * Full.I(
-                    ts[i],
-                    g_gp_i.z,
-                    self.u_gp.z,
-                    thetagl,
-                    betagl,
-                    thetaul,
-                    betaul,
-                    wgl,
-                    qgl,
-                    wul,
-                    qul,
-                    1.0,
-                    ampu,
-                    self.alpha[i][j],
-                    l2p(lsgs[i][j]),
-                    l2p(lsu),
+                sampsi += (
+                    ampu
+                    * ampgs[i][j] ** (j + 1)
+                    * self.I_class.I(
+                        ts[i],
+                        g_gp_i.z,
+                        self.u_gp.z,
+                        thetagl,
+                        betagl,
+                        thetaul,
+                        betaul,
+                        wgl,
+                        qgl,
+                        wul,
+                        qul,
+                        self.alpha[i][j],
+                        l2p(lsgs[i][j]),
+                        l2p(lsu),
+                    )
                 )
                 # id_print(sampsi)
             samps.append(sampsi)
@@ -502,14 +631,7 @@ class MOVarNVKM:
 
     def sample(self, ts, N_s, key=jrnd.PRNGKey(1)):
         return self._sample(
-            ts,
-            self.q_pars,
-            self.ampgs,
-            self.lsgs,
-            self.ampu,
-            self.lsu,
-            N_s,
-            jrnd.split(key, 3),
+            ts, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key,
         )
 
     def predict(self, ts, N_s, key=jrnd.PRNGKey(1)):
@@ -536,9 +658,7 @@ class MOVarNVKM:
         )
 
         xs, ys = data
-        samples = self._sample(
-            xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, jrnd.split(key, 3),
-        )
+        samples = self._sample(xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, key,)
         like = 0.0
         for i in range(self.O):
             like += self.likelihood(ys[i], samples[i], noise[i])
@@ -716,9 +836,73 @@ class MOVarNVKM:
         plt.show()
 
 
+class SepMOVarNVKM(MOVarNVKM):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.I_class = Separable
+
+    def construct_gps(self, lsu, lsgs, key=jrnd.PRNGKey(0), q_frac=0.8, q_pars=None):
+        g_gps = []
+        for i in range(self.O):
+            gpl = []
+            for j in range(self.C[i]):
+                key, _ = jrnd.split(key)
+                if q_pars is not None:
+                    gpl.append(
+                        SepVarEQApproxGP(
+                            z=self.zgs[i][j],
+                            N_basis=self.N_basis,
+                            mu=q_pars["mu_gs"][i][j],
+                            LC=q_pars["LC_gs"][i][j],
+                            D=j + 1,
+                            ls=lsgs[i][j],
+                            amp=1.0,
+                        )
+                    )
+                else:
+                    gpl.append(
+                        SepVarEQApproxGP(
+                            z=self.zgs[i][j],
+                            N_basis=self.N_basis,
+                            q_frac=q_frac,
+                            D=j + 1,
+                            ls=lsgs[i][j],
+                            amp=1.0,
+                            key=key,
+                        )
+                    )
+
+                key, _ = jrnd.split(key)
+            g_gps.append(gpl)
+
+        if q_pars is not None:
+            u_gp = VarEQApproxGP(
+                z=self.zu,
+                N_basis=self.N_basis,
+                mu=q_pars["mu_u"],
+                LC=q_pars["LC_us"],
+                D=1,
+                ls=lsu,
+                amp=1.0,
+                key=key,
+            )
+        else:
+            u_gp = VarEQApproxGP(
+                z=self.zu,
+                N_basis=self.N_basis,
+                q_frac=q_frac,
+                D=1,
+                ls=lsu,
+                amp=1.0,
+                key=key,
+            )
+        return u_gp, g_gps
+
+
 class SepHomogMOVarNVKM(MOVarNVKM):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.I_class = Homogeneous
 
     def construct_gps(self, lsu, lsgs, key=jrnd.PRNGKey(0), q_frac=0.8, q_pars=None):
         g_gps = []
@@ -754,16 +938,34 @@ class SepHomogMOVarNVKM(MOVarNVKM):
                 key, _ = jrnd.split(key)
             g_gps.append(gpl)
 
-        u_gp = VarEQApproxGP(
-            z=self.zu, N_basis=self.N_basis, D=1, ls=lsu, amp=1.0, key=key
-        )
+        if q_pars is not None:
+            u_gp = VarEQApproxGP(
+                z=self.zu,
+                N_basis=self.N_basis,
+                mu=q_pars["mu_u"],
+                LC=q_pars["LC_us"],
+                D=1,
+                ls=lsu,
+                amp=1.0,
+                key=key,
+            )
+        else:
+            u_gp = VarEQApproxGP(
+                z=self.zu,
+                N_basis=self.N_basis,
+                q_frac=q_frac,
+                D=1,
+                ls=lsu,
+                amp=1.0,
+                key=key,
+            )
         return u_gp, g_gps
 
     @partial(jit, static_argnums=(0, 7))
-    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, keys):
+    def _sample(self, ts, q_pars, ampgs, lsgs, ampu, lsu, N_s, key):
 
-        # skey = jrnd.split(keys, 0)
-        u_basis_samps = self.u_gp.sample_basis(keys[0], N_s, ampu, lsu)
+        keys = jrnd.split(key, 2)
+        u_basis_samps = self.u_gp.sample_basis(keys[1], N_s, ampu, lsu)
         thetaul, betaul, wul = u_basis_samps
         # _, u_LKvv = u_gp.compute_covariances(ampu, lsu)
 
@@ -771,7 +973,7 @@ class SepHomogMOVarNVKM(MOVarNVKM):
         #     v_samps["u"], thetaul, betaul, wul
         # )
         qul = self.u_gp.sample_qs(
-            q_pars["mu_u"], q_pars["LC_us"], ampu, lsu, u_basis_samps, N_s, keys[1]
+            q_pars["mu_u"], q_pars["LC_us"], ampu, lsu, u_basis_samps, N_s, keys[0]
         )
         samps = []
         for i in range(self.O):
@@ -798,7 +1000,7 @@ class SepHomogMOVarNVKM(MOVarNVKM):
                 sampsi += (
                     ampu
                     * ampgs[i][j] ** (j + 1)
-                    * Homogeneous.I(
+                    * self.I_class.I(
                         ts[i],
                         g_gp_i.z,
                         self.u_gp.z,
@@ -904,10 +1106,11 @@ class IOMOVarNVKM(MOVarNVKM):
 
     @partial(jit, static_argnums=(0, 8))
     def _joint_sample(self, tu, tys, q_pars, ampgs, lsgs, ampu, lsu, N_s, key):
-        keys = jrnd.split(key, 3)
-        vs = self.q_of_v.sample(q_pars, N_s, keys[0])["u"]
-        u_samps = self.u_gp._sample(tu.reshape(-1, 1), vs, ampu, lsu, N_s, keys[1])
-        y_samps = self._sample(tys, q_pars, ampgs, lsgs, ampu, lsu, N_s, keys)
+        # we need to use the same key to make sure the samples are consistent
+        u_samps = self.u_gp._sample(
+            tu.reshape(-1, 1), q_pars["mu_u"], q_pars["LC_us"], ampu, lsu, N_s, key
+        )
+        y_samps = self._sample(tys, q_pars, ampgs, lsgs, ampu, lsu, N_s, key)
         return u_samps, y_samps
 
     def joint_sample(self, tu, tys, N_s, key=jrnd.PRNGKey(1)):
@@ -920,13 +1123,15 @@ class IOMOVarNVKM(MOVarNVKM):
         self, data, q_pars, ampgs, lsgs, ampu, lsu, noise, u_noise, N_s, key
     ):
 
-        p_pars = self._compute_p_pars(ampgs, lsgs, ampu, lsu)
-        for i in range(self.O):
-            for j in range(self.C[i]):
-                q_pars["LC_gs"][i][j] = choleskyize(q_pars["LC_gs"][i][j])
-        q_pars["LC_u"] = choleskyize(q_pars["LC_u"])
+        # p_pars = self._compute_p_pars(ampgs, lsgs, ampu, lsu)
+        # for i in range(self.O):
+        #     for j in range(self.C[i]):
+        #         q_pars["LC_gs"][i][j] = choleskyize(q_pars["LC_gs"][i][j])
+        # q_pars["LC_u"] = choleskyize(q_pars["LC_u"])
 
-        KL = self.q_of_v.KL(p_pars, q_pars)
+        KL = self._KL(
+            q_pars["mu_u"], q_pars["mu_gs"], q_pars["LC_us"], q_pars["LC_gs"], lsu, lsgs
+        )
 
         u_data, y_data = data
         xs, ys = y_data
@@ -938,10 +1143,7 @@ class IOMOVarNVKM(MOVarNVKM):
         like = 0.0
         for i in range(self.O):
             like += self.likelihood(ys[i], y_samples[i], noise[i])
-        # id_print(like)
         like += self.likelihood(uo, u_samples, u_noise)
-        # id_print(KL)
-        # id_print(like)
         return -(KL + like)
 
     def fit(
@@ -1014,9 +1216,10 @@ class IOMOVarNVKM(MOVarNVKM):
         for i, k in enumerate(std_fit):
             setattr(self, k, bound_arg[i])
 
-        self.p_pars = self._compute_p_pars(self.ampgs, self.lsgs, self.ampu, self.lsu)
-        self.g_gps = self.set_G_gps(self.ampgs, self.lsgs)
-        self.u_gp = self.set_u_gp(self.ampu, self.lsu)
+        # self.opt_triple = opt_init, opt_update, get_params
+        self.u_gp, self.g_gps = self.construct_gps(
+            self.lsu, self.lsgs, q_pars=self.q_pars
+        )
 
     def plot_samples(
         self, tu, tys, N_s, return_axs=False, save=False, key=jrnd.PRNGKey(304)
@@ -1049,6 +1252,10 @@ class IOMOVarNVKM(MOVarNVKM):
         if save:
             plt.savefig(save)
         plt.show()
+
+
+class SepHomogIOMOVarNVKM(IOMOVarNVKM, SepHomogMOVarNVKM):
+    pass
 
 
 def load_io_model(pkl_path: str) -> IOMOVarNVKM:
