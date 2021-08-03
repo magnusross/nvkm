@@ -2,9 +2,10 @@ import operator
 from functools import partial
 
 import jax.numpy as jnp
+from jax.scipy.special import erf
 from jax import config, jit, lax, vmap
 
-from nvkm.utils import map_reduce, map2matrix
+from nvkm.utils import map_reduce, map2matrix, erfi
 
 config.update("jax_enable_x64", True)
 
@@ -56,7 +57,17 @@ class Full:
 
     @classmethod
     def slow_I1(
-        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, alpha, pu,
+        cls,
+        t,
+        zus,
+        thetag,
+        betag,
+        thetus,
+        betaus,
+        wus,
+        qus,
+        alpha,
+        pu,
     ):
         """
         Slow implementation of integral 1 from supplementary material for testing.
@@ -88,7 +99,17 @@ class Full:
     @classmethod
     @partial(jit, static_argnums=(0,))
     def fast_I1(
-        cls, t, zus, thetag, betag, thetus, betaus, wus, qus, alpha, pu,
+        cls,
+        t,
+        zus,
+        thetag,
+        betag,
+        thetus,
+        betaus,
+        wus,
+        qus,
+        alpha,
+        pu,
     ):
         """
         Fast implementation of integral 1 from supplementary material.
@@ -187,11 +208,29 @@ class Full:
         out = 0.0
         for i in range(Nl):
             out += wgs[i] * cls.slow_I1(
-                t, zus, thetags[i], betags[i], thetus, betaus, wus, qus, alpha, pu,
+                t,
+                zus,
+                thetags[i],
+                betags[i],
+                thetus,
+                betaus,
+                wus,
+                qus,
+                alpha,
+                pu,
             )
         for j in range(Mg):
             out += qgs[j] * cls.slow_I2(
-                t, zgs[j], zus, thetus, betaus, wus, qus, alpha, pg, pu,
+                t,
+                zgs[j],
+                zus,
+                thetus,
+                betaus,
+                wus,
+                qus,
+                alpha,
+                pg,
+                pu,
             )
         return out
 
@@ -220,13 +259,42 @@ class Full:
 
         o1 = vmap(
             lambda thetagi, betagi, wgi,: wgi
-            * cls.fast_I1(t, zus, thetagi, betagi, thetus, betaus, wus, qus, alpha, pu,)
-        )(thetags, betags, wgs,)
+            * cls.fast_I1(
+                t,
+                zus,
+                thetagi,
+                betagi,
+                thetus,
+                betaus,
+                wus,
+                qus,
+                alpha,
+                pu,
+            )
+        )(
+            thetags,
+            betags,
+            wgs,
+        )
 
         o2 = vmap(
             lambda zgi, qgi: qgi
-            * cls.fast_I2(t, zgi, zus, thetus, betaus, wus, qus, alpha, pg, pu,)
-        )(zgs, qgs,)
+            * cls.fast_I2(
+                t,
+                zgi,
+                zus,
+                thetus,
+                betaus,
+                wus,
+                qus,
+                alpha,
+                pg,
+                pu,
+            )
+        )(
+            zgs,
+            qgs,
+        )
 
         return jnp.sum(o1) + jnp.sum(o2)
 
@@ -268,7 +336,9 @@ class Full:
                     pu,
                 )
             )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
-        )(ts,)
+        )(
+            ts,
+        )
 
 
 class Separable:
@@ -353,7 +423,18 @@ class Separable:
         t4 = 0.0
         for i in range(len(qgs)):
             for j in range(len(qus)):
-                t4 += qgs[i] * qus[j] * cls.I_k_k(t, alpha, pg, zgs[i], pu, zus[j],)
+                t4 += (
+                    qgs[i]
+                    * qus[j]
+                    * cls.I_k_k(
+                        t,
+                        alpha,
+                        pg,
+                        zgs[i],
+                        pu,
+                        zus[j],
+                    )
+                )
         Nl = len(thetgs)
         return t1 + (t2 + t3) + t4
 
@@ -459,7 +540,9 @@ class Separable:
                     )(athetags, abetags, awgs, aqgs)
                 ),
             )(athetagl[:, :, :, 0], abetagl, thetaul, betaul, awgl, aqgl, wul, qul)
-        )(ts,)
+        )(
+            ts,
+        )
 
 
 class Homogeneous(Separable):
@@ -504,5 +587,64 @@ class Homogeneous(Separable):
                     )
                 )
             )(thetagl, betagl, thetaul, betaul, wgl, qgl, wul, qul)
-        )(ts,)
+        )(
+            ts,
+        )
 
+
+class CausalSeparable(Separable):
+    @staticmethod
+    @jit
+    def I_phi_phi(t, alpha, thet1, thet2, beta1, beta2):
+        coeff = (
+            0.25
+            * jnp.sqrt(jnp.pi / alpha)
+            * jnp.exp(-((thet1 + thet2) ** 2) / (4.0 * alpha))
+        )
+        t1 = jnp.cos(beta1 - beta2 - t * thet2) + erfi(
+            (thet1 + thet2) / (2 * jnp.sqrt(alpha))
+        ) * jnp.sin(beta1 - beta2 - t * thet2)
+
+        t2 = jnp.exp(thet2 * thet1 / alpha) * (
+            jnp.cos(beta1 + beta2 + t * thet2)
+            + erfi((thet1 - thet2) / (2 * jnp.sqrt(alpha)))
+            * jnp.sin(beta1 + beta2 + t * thet2)
+        )
+        return coeff * (t1 + t2)
+
+    @staticmethod
+    @jit
+    def I_k_k(t, alpha, p1, z1, p2, z2):
+        coeff = -0.5 * jnp.sqrt(jnp.pi / (alpha + p1 + p2))
+        ea1 = alpha * (p1 * z1 ** 2 + p2 * (t - z2) ** 2)
+        ea2 = p1 * p2 * (z1 + z2 - t) ** 2
+        er = erf(p1 * z1 + p2 * (t - z2) / jnp.sqrt(alpha + p1 + p2)) - 1
+        return coeff * jnp.exp(-(ea1 + ea2) / (alpha + p1 + p2)) * er
+
+    @staticmethod
+    @jit
+    def I_phi_k(t, alpha, thet1, beta1, p2, z2):
+        z = lax.complex(2 * p2 * (z2 - t), -thet1)
+        absz = jnp.abs(z)
+        w = absz + z * erf(absz / (2 * jnp.sqrt(alpha + p2)))
+        coeff = jnp.sqrt(jnp.pi) / (4 * jnp.sqrt(alpha + p2) * absz)
+        er2 = -0.25 * (thet1 ** 2 + 4 * alpha * p2 * (t - z2) ** 2) / (alpha + p2)
+        ei2 = (alpha * beta1 + p2 * (beta1 + thet1 * (t - z2))) / (alpha + p2)
+        return 2 * coeff * jnp.abs(w) * jnp.exp(er2) * jnp.cos(ei2 + jnp.angle(w))
+
+    @staticmethod
+    @jit
+    def I_k_phi(t, alpha, p1, z1, thet2, beta2):
+        z = lax.complex(-z1, -(p1 ** 2) * thet2)
+        absz = jnp.abs(z)
+        w = absz + z * erfi(absz / (p1 * jnp.sqrt(2 + 4 * alpha * p1 ** 2)))
+        coeff = (p1 * jnp.sqrt(jnp.pi)) / (2 * jnp.sqrt(2 + 4 * alpha * p1 ** 2) * absz)
+        er2 = -(jnp.square(p1 * thet2) + 2 * alpha * z1 ** 2) / (
+            2 + 4 * alpha * p1 ** 2
+        )
+        ei2 = -(beta2 + thet2 * (t - (z1) / (1 + 2 * alpha * p1 ** 2)))
+        return 2 * coeff * jnp.abs(w) * jnp.exp(er2) * jnp.cos(ei2 + jnp.angle(w))
+
+
+class CausalHomogeneous(Homogeneous, CausalSeparable):
+    pass
