@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as onp
 from jax import jit, vmap
 from tensorflow_probability.substrates import jax as tfp
-
+from jax.experimental.host_callback import id_print
 
 from .settings import JITTER
 
@@ -158,11 +158,14 @@ def make_zg_grids(zgran: list, Nvgs: list):
     return tgs, lsgs
 
 
-def make_zg_grids1D(zgran: list, Nvgs: list):
+def make_zg_grids1D(zgran: list, Nvgs: list, causal=False):
     tgs = []
     lsgs = []
     for i in range(len(Nvgs)):
-        tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i]).reshape(-1, 1)
+        if causal:
+            tg = jnp.linspace(0.0, zgran[i], Nvgs[i]).reshape(-1, 1)
+        else:
+            tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i]).reshape(-1, 1)
         lsgs.append((tg[1][0] - tg[0][0]))
         tgs.append(tg)
     return tgs, lsgs
