@@ -34,10 +34,10 @@ class EQApproxGP:
         amp: float = 1.0,
         noise: float = 0.0,
     ):
-        """ 
-        Implements the functional sampling method from 
-        "Efficiently Sampling Functions from Gaussian Process Posteriors"  by 
-        Wilson et al. for a GP with EQ (SE) kernel. 
+        """
+        Implements the functional sampling method from
+        "Efficiently Sampling Functions from Gaussian Process Posteriors"  by
+        Wilson et al. for a GP with EQ (SE) kernel.
 
         Args:
             z (Union[jnp.ndarray, None], optional): Inducing input locations. Defaults to None.
@@ -212,15 +212,15 @@ class MOVarNVKM:
         ampu: float = 1.0,
     ):
         """
-        Implements the NVKM, for multiple ouputs. 
+        Implements the NVKM, for multiple ouputs.
 
         Args:
-            zgs (List[List[jnp.ndarray]]): Inducing inputs for each Volterra kernel, 
-            each ouput is first dimension, each term for that output second dimesion. 
+            zgs (List[List[jnp.ndarray]]): Inducing inputs for each Volterra kernel,
+            each ouput is first dimension, each term for that output second dimesion.
             zu (jnp.ndarray): Inducing inputs for the input process u.
             data (Tuple[List[jnp.ndarray]]): data for each ouput, in format (x, y).
             q_class (type, optional): Varational distribution. Defaults to MOIndependentGaussians.
-            q_pars_init (Dict[str, List[List[jnp.ndarray]]], optional): Initial vairational parameters. 
+            q_pars_init (Dict[str, List[List[jnp.ndarray]]], optional): Initial vairational parameters.
             Defaults to None.
             q_initializer_pars (float, optional): If variational parmeters not given,
              then initialser will be used, which aslo takes parameters, given here. Defaults to None.
@@ -308,7 +308,14 @@ class MOVarNVKM:
             for j, gp in enumerate(self.g_gps[i]):
                 keys = jrnd.split(keys[1])
                 il.append(
-                    gp._sample(ts[i][j], vs[i][j], 1.0, self.lsgs[i][j], N_s, keys[1],)
+                    gp._sample(
+                        ts[i][j],
+                        vs[i][j],
+                        1.0,
+                        self.lsgs[i][j],
+                        N_s,
+                        keys[1],
+                    )
                 )
             samps.append(il)
 
@@ -473,7 +480,12 @@ class MOVarNVKM:
 
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
-            value, grads = grad_fn((x_bs, y_bs), *bound_arg, N_s, skey,)
+            value, grads = grad_fn(
+                (x_bs, y_bs),
+                *bound_arg,
+                N_s,
+                skey,
+            )
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
@@ -542,7 +554,9 @@ class MOVarNVKM:
         g_samps = self.sample_diag_g_gps(tfs, N_s, jrnd.split(key, 2))
 
         _, axs = plt.subplots(
-            ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
+            ncols=max(self.C),
+            nrows=self.O,
+            figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
             y = g_samps[0][0].T * jnp.exp(-self.alpha[0][0] * (tf) ** 2)
@@ -594,15 +608,18 @@ class IOMOVarNVKM(MOVarNVKM):
         Implements the input output variant of the NVKM.
 
         Args:
-            zgs (List[List[jnp.ndarray]]): Inducing inputs for each Volterra kernel, 
-            each ouput is first dimension, each term for that output second dimesion. 
+            zgs (List[List[jnp.ndarray]]): Inducing inputs for each Volterra kernel,
+            each ouput is first dimension, each term for that output second dimesion.
             zu (jnp.ndarray): Inducing inputs for the input process u.
             u_data (Tuple[jnp.ndarray]): data for the input process in form (x, y)
             y_data (Tuple[List[jnp.ndarray]]): data for the each ouput in form (x, y)
             u_noise (float, optional): noise for input process. Defaults to 1.0.
         """
         super().__init__(
-            zgs, zu, None, **kwargs,
+            zgs,
+            zu,
+            None,
+            **kwargs,
         )
         self.u_noise = u_noise
         self.data = (u_data, y_data)
@@ -617,7 +634,15 @@ class IOMOVarNVKM(MOVarNVKM):
 
     def joint_sample(self, tu, tys, N_s, key=jrnd.PRNGKey(1)):
         return self._joint_sample(
-            tu, tys, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key,
+            tu,
+            tys,
+            self.q_pars,
+            self.ampgs,
+            self.lsgs,
+            self.ampu,
+            self.lsu,
+            N_s,
+            key,
         )
 
     @partial(jit, static_argnums=(0, 9))
@@ -650,7 +675,13 @@ class IOMOVarNVKM(MOVarNVKM):
         return -(KL + like)
 
     def fit(
-        self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1),
+        self,
+        its,
+        lr,
+        batch_size,
+        N_s,
+        dont_fit=[],
+        key=jrnd.PRNGKey(1),
     ):
 
         u_data, y_data = self.data
@@ -702,7 +733,10 @@ class IOMOVarNVKM(MOVarNVKM):
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
             value, grads = grad_fn(
-                ((xu_bs, yu_bs), (x_bs, y_bs)), *bound_arg, N_s, skey,
+                ((xu_bs, yu_bs), (x_bs, y_bs)),
+                *bound_arg,
+                N_s,
+                skey,
             )
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
@@ -787,7 +821,7 @@ def load_io_model(pkl_path: str) -> IOMOVarNVKM:
 
 
 def load_mo_model(pkl_path: str) -> MOVarNVKM:
-    """    
+    """
     Loads MOVarNVKM from .pkl file.
 
     Args:
