@@ -38,9 +38,8 @@ def main(args):
         [tgs],
         zu,
         ([x_train], [y_train]),
-        q_pars_init=None,
-        q_initializer_pars=args.q_frac,
-        q_init_key=keys[0],
+        q_frac=args.q_frac,
+        key=keys[0],
         lsgs=[lsgs],
         ampgs=[args.ampgs],
         noise=[args.noise],
@@ -69,7 +68,7 @@ def main(args):
     )
 
     model.save(model_path + "_model.pkl")
-    axs = model.plot_samples(
+    _ = model.plot_samples(
         jnp.linspace(-args.zurange, args.zurange, 300),
         [jnp.linspace(-args.zurange, args.zurange, 300)],
         10,
@@ -83,18 +82,24 @@ def main(args):
     preds = model.predict([t], 30)
     mean, var = preds[0][0], preds[1][0]
 
-    fig = plt.figure(figsize=(10, 2))
+    _ = plt.figure(figsize=(10, 2))
     plt.scatter(x_train, y_train, c="black", s=10, alpha=0.5)
     plt.plot(t, mean, c="green")
     plt.scatter(x_test, y_test, c="red", s=10, alpha=0.5)
     plt.fill_between(
-        t, mean - 2 * jnp.sqrt(var), mean + 2 * jnp.sqrt(var), alpha=0.1, color="green",
+        t,
+        mean - 2 * jnp.sqrt(var),
+        mean + 2 * jnp.sqrt(var),
+        alpha=0.1,
+        color="green",
     )
     plt.savefig(plot_path + "_preds.pdf")
     plt.show()
 
     model.plot_filters(
-        jnp.linspace(-max(args.zgrange), max(args.zgrange), 100), 10, key=keys[3],
+        jnp.linspace(-max(args.zgrange), max(args.zgrange), 100),
+        10,
+        key=keys[3],
     )
     plt.savefig(plot_path + "_filters.pdf")
 
@@ -174,4 +179,3 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(args)
-

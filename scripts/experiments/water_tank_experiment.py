@@ -57,9 +57,8 @@ def main(args):
         zu,
         udata,
         ytrain,
-        q_pars_init=None,
-        q_initializer_pars=args.q_frac,
-        q_init_key=keys[0],
+        q_frac=args.q_frac,
+        key=keys[0],
         lsgs=[lsgs],
         ampgs=[args.ampgs],
         alpha=[[3 / (args.zgrange[i]) ** 2 for i in range(C)]],
@@ -138,7 +137,7 @@ def main(args):
     print("RMSE: %.3f" % rmse)
     print("NLPD: %.3f" % nlpd)
 
-    fig = plt.figure(figsize=(12, 4))
+    _ = plt.figure(figsize=(12, 4))
     plt.plot(data["Ts"], data["yVal"], c="black", ls=":", label="Val. Data")
     plt.plot(data["Ts"], pred_mean, c="green", label="Pred. Mean")
     plt.fill_between(

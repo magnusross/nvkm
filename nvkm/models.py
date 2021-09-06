@@ -186,8 +186,8 @@ class SepEQApproxGP(EQApproxGP):
     inducing inputs, so z is Nx1 v is NxD
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     @partial(jit, static_argnums=(0, 2))
     def sample_basis(

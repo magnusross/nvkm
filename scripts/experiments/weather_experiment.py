@@ -35,9 +35,8 @@ def main(args):
         [tgs] * O,
         zu,
         (data.strain_x, data.strain_y),
-        q_pars_init=None,
-        q_initializer_pars=args.q_frac,
-        q_init_key=keys[0],
+        q_frac=args.q_frac,
+        key=keys[0],
         lsgs=[lsgs] * O,
         noise=[args.noise] * O,
         ampgs=[args.ampgs] * O,
@@ -83,7 +82,7 @@ def main(args):
     _, pred_mean = data.upscale(data.stest_x, spreds[0])
     pred_var = data.upscale_variance(spreds[1])
 
-    fig, axs = plt.subplots(2, 1, figsize=(5, 5))
+    _, axs = plt.subplots(2, 1, figsize=(5, 5))
     for i in range(2):
         axs[i].plot(
             data.test_x[i + 1], data.test_y[i + 1], c="black", ls=":", label="Val. Data"
