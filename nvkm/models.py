@@ -12,7 +12,7 @@ from jax import jit, value_and_grad, vmap
 from jax.config import config
 from jax.experimental.host_callback import id_print
 
-from .integrals import Full, Homogeneous, Separable
+from .integrals import Full, Homogeneous, Separable, CausalSeparable, CausalHomogeneous
 from .settings import JITTER
 from .utils import choleskyize, eq_kernel, l2p, map2matrix
 from .vi import (
@@ -182,7 +182,7 @@ class EQApproxGP:
 class SepEQApproxGP(EQApproxGP):
     """
     Class for high dim (>2) that are separable, ie have a different GP for each dimension.
-    We further assume that the lengthscale and amp for each dimension is the same as well as the 
+    We further assume that the lengthscale and amp for each dimension is the same as well as the
     inducing inputs, so z is Nx1 v is NxD
     """
 
@@ -296,7 +296,13 @@ class VarEQApproxGP(EQApproxGP):
         return self._KL(self.LC, self.mu, self.LKvv)
 
     # @staticmethod
-    @partial(jit, static_argnums=(0, 3,))
+    @partial(
+        jit,
+        static_argnums=(
+            0,
+            3,
+        ),
+    )
     def _sample_vs(self, LC, mu, N_s, key):
         return jrnd.multivariate_normal(
             key, mu, JITTER * jnp.eye(mu.shape[0]) + LC @ LC.T, (N_s,)
@@ -631,7 +637,14 @@ class MOVarNVKM:
 
     def sample(self, ts, N_s, key=jrnd.PRNGKey(1)):
         return self._sample(
-            ts, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key,
+            ts,
+            self.q_pars,
+            self.ampgs,
+            self.lsgs,
+            self.ampu,
+            self.lsu,
+            N_s,
+            key,
         )
 
     def predict(self, ts, N_s, key=jrnd.PRNGKey(1)):
@@ -658,7 +671,16 @@ class MOVarNVKM:
         )
 
         xs, ys = data
-        samples = self._sample(xs, q_pars, ampgs, lsgs, ampu, lsu, N_s, key,)
+        samples = self._sample(
+            xs,
+            q_pars,
+            ampgs,
+            lsgs,
+            ampu,
+            lsu,
+            N_s,
+            key,
+        )
         like = 0.0
         for i in range(self.O):
             like += self.likelihood(ys[i], samples[i], noise[i])
@@ -718,7 +740,12 @@ class MOVarNVKM:
 
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
-            value, grads = grad_fn((x_bs, y_bs), *bound_arg, N_s, skey,)
+            value, grads = grad_fn(
+                (x_bs, y_bs),
+                *bound_arg,
+                N_s,
+                skey,
+            )
 
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")
@@ -787,7 +814,9 @@ class MOVarNVKM:
             for i in range(self.O)
         ]
         _, axs = plt.subplots(
-            ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
+            ncols=max(self.C),
+            nrows=self.O,
+            figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
             y = self.g_gps[0][0].sample(tfs[0][0], N_s, key).T * jnp.exp(
@@ -837,9 +866,12 @@ class MOVarNVKM:
 
 
 class SepMOVarNVKM(MOVarNVKM):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, causal=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.I_class = Separable
+        if causal:
+            self.I_class = CausalSeparable
+        else:
+            self.I_class = Separable
 
     def construct_gps(self, lsu, lsgs, key=jrnd.PRNGKey(0), q_frac=0.8, q_pars=None):
         g_gps = []
@@ -900,9 +932,13 @@ class SepMOVarNVKM(MOVarNVKM):
 
 
 class SepHomogMOVarNVKM(MOVarNVKM):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, causal=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.I_class = Homogeneous
+
+        if causal:
+            self.I_class = CausalHomogeneous
+        else:
+            self.I_class = Homogeneous
 
     def construct_gps(self, lsu, lsgs, key=jrnd.PRNGKey(0), q_frac=0.8, q_pars=None):
         g_gps = []
@@ -1028,7 +1064,9 @@ class SepHomogMOVarNVKM(MOVarNVKM):
     ):
         tfs = [[tf.reshape(-1, 1) for gp in self.g_gps[i]] for i in range(self.O)]
         _, axs = plt.subplots(
-            ncols=max(self.C), nrows=self.O, figsize=(4 * max(self.C), 2 * self.O),
+            ncols=max(self.C),
+            nrows=self.O,
+            figsize=(4 * max(self.C), 2 * self.O),
         )
         if max(self.C) == 1 and self.O == 1:
             y = self.g_gps[0][0].sample(tfs[0][0], N_s, key).T * jnp.exp(
@@ -1099,7 +1137,10 @@ class IOMOVarNVKM(MOVarNVKM):
             u_noise (float, optional): noise for input process. Defaults to 1.0.
         """
         super().__init__(
-            zgs, zu, None, **kwargs,
+            zgs,
+            zu,
+            None,
+            **kwargs,
         )
         self.u_noise = u_noise
         self.data = (u_data, y_data)
@@ -1115,7 +1156,15 @@ class IOMOVarNVKM(MOVarNVKM):
 
     def joint_sample(self, tu, tys, N_s, key=jrnd.PRNGKey(1)):
         return self._joint_sample(
-            tu, tys, self.q_pars, self.ampgs, self.lsgs, self.ampu, self.lsu, N_s, key,
+            tu,
+            tys,
+            self.q_pars,
+            self.ampgs,
+            self.lsgs,
+            self.ampu,
+            self.lsu,
+            N_s,
+            key,
         )
 
     @partial(jit, static_argnums=(0, 9))
@@ -1147,7 +1196,13 @@ class IOMOVarNVKM(MOVarNVKM):
         return -(KL + like)
 
     def fit(
-        self, its, lr, batch_size, N_s, dont_fit=[], key=jrnd.PRNGKey(1),
+        self,
+        its,
+        lr,
+        batch_size,
+        N_s,
+        dont_fit=[],
+        key=jrnd.PRNGKey(1),
     ):
 
         u_data, y_data = self.data
@@ -1199,7 +1254,10 @@ class IOMOVarNVKM(MOVarNVKM):
             for k, ix in enumerate(dpars_argnum):
                 bound_arg[ix - 1] = get_params(opt_state)[k]
             value, grads = grad_fn(
-                ((xu_bs, yu_bs), (x_bs, y_bs)), *bound_arg, N_s, skey,
+                ((xu_bs, yu_bs), (x_bs, y_bs)),
+                *bound_arg,
+                N_s,
+                skey,
             )
             if jnp.any(jnp.isnan(value)):
                 print("nan F!!")

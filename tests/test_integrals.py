@@ -1,4 +1,4 @@
-from nvkm.integrals import Full, Separable
+from nvkm.integrals import Full, Separable, CausalSeparable
 import jax.numpy as jnp
 import jax.random as jrnd
 import jax
@@ -135,7 +135,6 @@ class TestFull:
         assert jnp.isclose(si, fi)
 
 
-# 1.8723126229503788
 class TestSeparable:
     def test_I_phi_phi(self):
         ours = Separable.I_phi_phi(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
@@ -145,4 +144,28 @@ class TestSeparable:
     def test_I_k_phi(self):
         ours = Separable.I_k_phi(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
         ans = 1.8723126229503788
+        assert jnp.isclose(ans, ours)
+
+
+class TestCausalSeparable:
+    def test_I_phi_phi(self):
+        ours = CausalSeparable.I_phi_phi(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
+        ans = 0.7451779920255216
+        assert jnp.isclose(ans, ours)
+
+    def test_I_k_k(self):
+        ours = CausalSeparable.I_k_k(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
+        ans = 0.8687320174054098
+        assert jnp.isclose(ans, ours)
+
+    #
+    def test_phi_k(self):
+        ours = CausalSeparable.I_phi_k(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
+        ans = 1.3101860185050542
+        assert jnp.isclose(ans, ours)
+
+    #
+    def test_k_phi(self):
+        ours = CausalSeparable.I_k_phi(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
+        ans = -0.16734903083977556
         assert jnp.isclose(ans, ours)

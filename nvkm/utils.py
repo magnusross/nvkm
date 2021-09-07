@@ -13,7 +13,8 @@ import jax.scipy as jsp
 import matplotlib.pyplot as plt
 import numpy as onp
 from jax import jit, vmap
-
+from tensorflow_probability.substrates import jax as tfp
+from jax.experimental.host_callback import id_print
 
 from .settings import JITTER
 
@@ -40,7 +41,10 @@ def map2matrix(f: Callable, ts: jnp.ndarray, tps: jnp.ndarray, *args) -> jnp.nda
 
 @partial(jit, static_argnums=(0,))
 def map_reduce(
-    f: Callable, *arrs: jnp.ndarray, init_val: float = 0.0, op: Callable = operator.add,
+    f: Callable,
+    *arrs: jnp.ndarray,
+    init_val: float = 0.0,
+    op: Callable = operator.add,
 ):
     """
     helper function for performing a map then a sum.
@@ -67,7 +71,7 @@ def p2l(p: float):
 @jit
 def RMSE(yp, ye):
     """
-    Root mean square error 
+    Root mean square error
     """
     return jnp.sqrt((jnp.sum((yp - ye) ** 2)) / len(yp))
 
@@ -75,7 +79,7 @@ def RMSE(yp, ye):
 @jit
 def NMSE(yp, ytrue):
     """
-    Normalised mean square error 
+    Normalised mean square error
     """
     return jnp.mean((yp - ytrue) ** 2) / jnp.mean((jnp.mean(ytrue) - ytrue) ** 2)
 
@@ -90,7 +94,10 @@ def gaussian_NLPD(yp, ypvar, ytrue):
 
 @jit
 def eq_kernel(
-    t: Union[jnp.ndarray, float], tp: Union[jnp.ndarray, float], amp: float, ls: float,
+    t: Union[jnp.ndarray, float],
+    tp: Union[jnp.ndarray, float],
+    amp: float,
+    ls: float,
 ) -> float:
     """
     EQ kernel in 1D if inputs are float, if inputs are array then
@@ -111,8 +118,8 @@ def eq_kernel(
 @jit
 def choleskyize(A):
     """
-    Enforces array as vaild cholesky decompostion, for optimisizing covariance 
-    matrices. 
+    Enforces array as vaild cholesky decompostion, for optimisizing covariance
+    matrices.
     """
     return jnp.tril(A - 2 * jnp.diag(jnp.diag(A) * (jnp.diag(A) < 0.0)))
 
@@ -151,11 +158,25 @@ def make_zg_grids(zgran: list, Nvgs: list):
     return tgs, lsgs
 
 
-def make_zg_grids1D(zgran: list, Nvgs: list):
+def make_zg_grids1D(zgran: list, Nvgs: list, causal=False):
     tgs = []
     lsgs = []
     for i in range(len(Nvgs)):
-        tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i]).reshape(-1, 1)
+        if causal:
+            tg = jnp.linspace(0.0, zgran[i], Nvgs[i]).reshape(-1, 1)
+        else:
+            tg = jnp.linspace(-zgran[i], zgran[i], Nvgs[i]).reshape(-1, 1)
         lsgs.append((tg[1][0] - tg[0][0]))
         tgs.append(tg)
     return tgs, lsgs
+
+
+@jit
+def erfi(x):
+    """Approximation of the imaginary error function, valid for real arguments."""
+    return 2.0 * tfp.math.dawsn(x) * jnp.exp(jnp.square(x)) / jnp.sqrt(jnp.pi)
+
+
+@jit
+def l2norm(x1, x2):
+    return jnp.sqrt(jnp.square(x1) + jnp.square(x2))
