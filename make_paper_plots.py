@@ -127,20 +127,20 @@ def plot_weather():
         axs[i - 1].scatter(
             data_set.test_x[i],
             data_set.test_y[i],
-            c="blue",
-            alpha=0.5,
+            c="deepskyblue",
+            alpha=0.3,
             marker="o",
             label="Test",
-            s=3,
+            s=15,
         )
         axs[i - 1].scatter(
             data_set.train_x[i],
             data_set.train_y[i],
             c="black",
-            alpha=0.5,
-            marker="x",
+            alpha=0.3,
+            marker="+",
             label="Train",
-            s=3,
+            s=15,
         )
         axs[i - 1].set_xlabel("Time (days)")
         axs[i - 1].set_ylabel(f"{data_set.output_names[i]} Temperature ($\degree$C)")
