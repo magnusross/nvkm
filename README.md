@@ -1,6 +1,6 @@
 # Learning Nonparametric Volterra Kernels with Gaussian Processes
 
-Python + Jax implementation of the nonparametric Volterra kernels model (NVKM), paper available [here]([https://arxiv.org/pdf/2106.05582.pdf](https://proceedings.neurips.cc/paper/2021/file/ca5fbbbddd0c0ff6c01f782c60c9d1b5-Paper.pdf)).
+Python + Jax implementation of the nonparametric Volterra kernels model (NVKM), paper available [here](https://proceedings.neurips.cc/paper/2021/file/ca5fbbbddd0c0ff6c01f782c60c9d1b5-Paper.pdf).
 
 
 Requirements
